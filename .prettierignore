@@ -1,0 +1,8 @@
+.next
+pnpm-lock.yaml
+components/ui
+data/destinations.json
+docs
+guides
+.superpowers
+.claude/settings.local.json

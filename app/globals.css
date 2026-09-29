@@ -1,0 +1,97 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@source "../node_modules/streamdown/dist/*.js";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-canvas: var(--canvas);
+  --color-foreground: var(--foreground);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-foreground: var(--warning-foreground);
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-display);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --radius: 0.75rem;
+  color-scheme: light;
+  --background: #ffffff;
+  /* The floor the two blocks sit on. --accent is 1.13:1 on white, too close to read as a
+     separate surface; this is 1.24:1, and the gutter plus the ring do the actual separating. */
+  --canvas: #e1e8ee;
+  --foreground: #22262a;
+  --card: #ffffff;
+  --card-foreground: #22262a;
+  --popover: #ffffff;
+  --popover-foreground: #22262a;
+  --primary: #f6c26b;
+  --primary-foreground: #22262a;
+  --secondary: #1e4d6b;
+  --secondary-foreground: #ffffff;
+  --muted: #f6f8fa;
+  --muted-foreground: #5a6168;
+  --accent: #edf2f6;
+  --accent-foreground: #1e4d6b;
+  --destructive: #d43f11;
+  --border: #dce4ea;
+  --input: #7a8c9a;
+  --ring: #1e4d6b;
+  /* --brand is the product identity (headings, logotype); --secondary is the same blue used as a
+     filled or drawn surface (badges, button fills, card outlines). Same hex, two intents. */
+  --brand: #1e4d6b;
+  --brand-hover: #143650;
+  --warning: #c47a00;
+  --warning-surface: #fff8e6;
+  --warning-foreground: #8a5200;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-canvas text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities {
+  /* The primary sand is 1.63:1 on white, so the button needs an edge to read as a control
+     (WCAG 2.2 SC 1.4.11). Declared in the utilities layer because the Button's own
+     `border-transparent` utility would otherwise win over any earlier layer, and keyed on
+     `data-variant` alone because Radix's Slot lets an `asChild` child overwrite `data-slot`. */
+  [data-variant="default"] {
+    border-color: var(--secondary);
+  }
+}

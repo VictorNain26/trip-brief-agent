@@ -1,0 +1,105 @@
+# Assistant voyage sur mesure
+
+A French conversational agent for a traveller who has not decided where, when or with whom to go.
+It talks with them, answers with sources, shows destinations, and turns the conversation into a
+structured trip brief — the part of a quote request a local agency reads to decide whether it can
+build an itinerary and a quote. It does not build the itinerary or the quote.
+
+Built with Next.js, the AI SDK and Claude Sonnet 5.5, searching with Tavily. It is a prototype: see
+[what the interface does not say](#what-the-interface-does-not-say) before running it.
+
+## Run locally
+
+The app runs from this repository. It needs Node 24 (`.nvmrc`), pnpm (version pinned in
+`package.json`) and two keys, listed in `.env.example`:
+
+- `ANTHROPIC_API_KEY` — every turn calls the Claude API and is billed.
+  [docs/product.md](docs/product.md) estimates $0.13–0.27 for a ten-turn conversation. A spend limit
+  can be set on the Console's Billing page
+  ([rate limits](https://platform.claude.com/docs/en/api/rate-limits#setting-your-own-spend-limit)).
+- `TAVILY_API_KEY` — Tavily has a free tier.
+
+```sh
+cp .env.example .env.local   # fill both keys
+pnpm install
+pnpm dev                     # http://localhost:3000
+```
+
+`pnpm dev` and `pnpm start` bind to `127.0.0.1`: the route authenticates nobody, so it stays off
+the local network.
+
+CI runs, in this order, `pnpm lint`, `pnpm format:check`, `pnpm typecheck` (which generates the
+route types with `next typegen` first), `pnpm test` and `pnpm build`.
+
+## How it works
+
+`app/api/chat/route.ts` → `lib/agent/chat.ts` (the agentic loop) → `lib/agent/tools.ts` (six
+tools); the client is `components/chat/`. Three capabilities carry the conversation:
+
+- _Visual questions_: `ask_traveler` renders a choice card, answered on the card or by typing in the
+  main input.
+- _Web search_: `search_web`, restricted to official domains for health and formalities. Its sources
+  sit where the search happened, behind a collapsed « N sources consultées · requête » line.
+- _Visual content_: `show_destination_card`. One card carries a map behind « Situer sur la carte ».
+  Two cards in the same turn are compared side by side under « Laquelle retenez-vous ? », row
+  against row, each with its own « Je retiens {label} » button; the cards carry the choice, and the
+  prompt forbids a question after them.
+
+The « Votre voyage » panel shows the brief as it fills: the prompt makes recording the destination,
+dates, duration and travellers the first call of every turn, before any search or recommendation.
+Once nothing blocks the brief, a recap card offers « Envoyer », « Modifier » and « Abandonner »; an
+approved send ends the turn on the sent card, without calling the model again.
+
+## Documentation
+
+- [Spec](docs/specs/2026-09-17-trip-brief-agent-design.md) — the living design, with its backlog.
+- [Architecture](docs/architecture.md) — an agentic loop wrapped in deterministic gates the model
+  cannot talk its way past: readiness (which also refuses a period already over), guide
+  prerequisites, a health search before a family destination card, catalogue coverage, source
+  provenance and the send approval. Includes the `POST /api/chat` lifecycle, the tool table and the
+  threat model for an untrusted client.
+- [ADRs](docs/adr/) — the [stack](docs/adr/0001-stack.md), the [model](docs/adr/0008-sonnet-5-5.md) (superseding [0002](docs/adr/0002-model.md)),
+  the [stateless brief](docs/adr/0003-stateless-brief.md), [search](docs/adr/0004-search.md),
+  [lazy guides](docs/adr/0005-lazy-guides.md), [portability](docs/adr/0006-portability.md) and
+  [no internals in the interface](docs/adr/0007-no-internals-in-the-interface.md), which supersedes
+  one clause of 0005.
+- [Product](docs/product.md) — where the "ready to send" threshold sits and why, the production
+  risk of confident wrong advice, and the cost per conversation.
+- [Evaluation](docs/evaluation.md) — a design, not implemented: the readiness decision first, then
+  field extraction, tool choice, grounding and efficiency; scenarios played by a simulated
+  traveller, deterministic assertions plus a judge from another provider, and a model-change rule
+  fixed before the numbers.
+- [Observability](docs/observability.md) — a design, not implemented: Langfuse through the AI
+  SDK's OpenTelemetry integration, one session per conversation, and signals for abandonment,
+  unanswerable requests, grounding, cost and latency.
+
+## What the interface does not say
+
+The screen carries no prototype notice beyond the simulated send, so these facts live here:
+
+- **The send is simulated.** Nothing reaches an agency. The recap and the sent card both say so.
+- **Nothing is persisted.** The conversation exists only in the browser tab; reloading the page
+  ends it.
+- **What leaves the browser.** The whole conversation goes to Anthropic's API, and the queries the
+  agent writes go to Tavily. There is no analytics, tracker or tracing; the server logs only an
+  error's name and HTTP status. Do not type personal data.
+
+## Assumptions
+
+- `guides/family_travel/SKILL.md` and `guides/responsible_travel/SKILL.md` are written for this
+  project; the agent loads them on demand with `load_guide`.
+- `data/destinations.json` lists the 249 ISO 3166-1 codes with their French names from Unicode CLDR
+  48.2.2, generated by `scripts/extract_destinations.py`. It stands in for agency coverage: a
+  destination outside it cannot enter the brief, and the agent says no agency covers it.
+- Inference runs on Anthropic's API with global processing, not in the EU.
+- The server recomputes the brief and every gate from the history the browser sends, but cannot
+  tell a real tool call from a forged one: a forged history only reaches its own session, since
+  nothing is persisted or sent ([threat model](docs/architecture.md#threat-model)).
+
+## Next steps
+
+The prioritised backlog is §15 of the
+[spec](docs/specs/2026-09-17-trip-brief-agent-design.md#15-backlog). First towards production:
+server-side persistence per conversation, EU inference, live agency coverage, the evaluation
+pipeline as a CI gate, a real send behind a signed approval, and tracing as designed. Hosting the
+app would first need authentication and rate limiting.
