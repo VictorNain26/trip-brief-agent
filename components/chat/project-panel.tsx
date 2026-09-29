@@ -34,8 +34,8 @@ function progress(brief: TripBrief | undefined, missing: MissingItem[]) {
     done,
     count: brief ? `${done}/${MANDATORY.length}` : undefined,
     sentence: brief
-      ? "Les quatre informations nécessaires à la demande de devis sont réunies."
-      : "Je note ici ce que vous me dites. Destination, période, durée, voyageurs : les quatre informations nécessaires à la demande de devis.",
+      ? "Les cinq informations nécessaires à la demande de devis sont réunies."
+      : "Je note ici ce que vous me dites. Destination, période, durée, voyageurs, budget : les cinq informations nécessaires à la demande de devis.",
     summary,
   };
 }

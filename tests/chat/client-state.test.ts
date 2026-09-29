@@ -97,7 +97,7 @@ describe("brief helpers", () => {
 
     const panel = panelBrief([recorded, assistant("2", [send(true)])]);
     expect(panel?.dates?.status).toBe("confirmed");
-    expect(panel?.budget?.status).toBe("inferred");
+    expect(panel?.departureCountry?.status).toBe("inferred");
     expect(panelBrief([])).toBeUndefined();
 
     // Fails if the sent brief outranks a correction typed after the send: the composer stays

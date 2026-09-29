@@ -45,6 +45,7 @@ export const MISSING_LABELS: Record<MissingItem, string> = {
   travelers: "les voyageurs",
   childrenAges: "l’âge des enfants",
   partySize: "le nombre de voyageurs pour le devis",
+  budget: "un budget, ou votre choix d’en parler avec l’agence",
   openContradiction: "un point contradictoire à clarifier",
 };
 
@@ -106,6 +107,7 @@ export function formatTravelers(travelers: TravelersValue): string {
 }
 
 export function formatBudget(budget: NonNullable<TripBrief["budget"]>["value"]): string {
+  if (budget.declined) return "à définir avec l’agence";
   const amounts =
     budget.ideal !== undefined && budget.ideal === budget.max
       ? [EUR.format(budget.ideal)]

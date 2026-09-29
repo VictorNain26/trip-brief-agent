@@ -124,7 +124,7 @@ describe("tools", () => {
     if (!output.ok) throw new Error("expected update_trip_brief to succeed");
     expect(state.brief.travelers?.value.children).toEqual([{ age: 4 }]);
     expect(output.requiredGuide).toBe("family_travel");
-    expect(output.missingForRecap).toEqual(["destination", "dates", "duration"]);
+    expect(output.missingForRecap).toEqual(["destination", "dates", "duration", "budget"]);
     expect(output.version).toBe(briefVersion(state.brief));
   });
 
@@ -349,7 +349,8 @@ describe("tools", () => {
     expect(sent.brief.dates?.status).toBe("confirmed");
     expect(sent.brief.duration?.status).toBe("confirmed");
     expect(sent.brief.travelers?.status).toBe("confirmed");
-    expect(sent.brief.budget?.status).toBe("inferred");
+    expect(sent.brief.budget?.status).toBe("confirmed");
+    expect(sent.brief.departureCountry?.status).toBe("inferred");
     expect(sent.agencyText).toContain("Viêt Nam");
     expect(state.brief.destination?.status).toBe("confirmed");
     expect(state.brief.travelers?.status).toBe("confirmed");

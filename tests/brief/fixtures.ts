@@ -25,6 +25,7 @@ export const decidedPatch = {
     status: "inferred",
     evidence: "budget ~4000€",
   },
+  departureCountry: { value: "France", status: "inferred" },
 };
 
 export const decidedBrief: TripBrief = mergeBriefInput(decidedPatch);

@@ -21,7 +21,27 @@ describe("readiness", () => {
       "dates",
       "duration",
       "travelers",
+      "budget",
     ]);
+  });
+
+  // Fails if the budget stops gating the recap: the family path used to reach it without the
+  // question ever being asked, and the agency received a brief with no budget at all.
+  it("waits for a budget, and accepts one the traveller leaves to the agency", () => {
+    const withoutBudget = apply({ budget: null });
+    expect(missingForRecap(withoutBudget, today)).toEqual(["budget"]);
+    const declined = apply({
+      budget: {
+        value: {
+          declined: true,
+          currency: "EUR",
+          basis: "perPersonExcludingInternationalFlights",
+        },
+        status: "confirmed",
+        evidence: "on verra avec l’agence",
+      },
+    });
+    expect(missingForRecap(declined, today)).toEqual([]);
   });
 
   it("accepts inferred values so a decided traveller reaches the recap", () => {

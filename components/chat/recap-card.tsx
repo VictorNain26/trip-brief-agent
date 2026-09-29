@@ -33,7 +33,7 @@ export function RecapCard({ brief, onRespond }: Props) {
         </CardTitle>
         <CardDescription>
           {hasInferred
-            ? `Les éléments marqués « ${STATUS_LABELS.inferred} » n’ont pas été confirmés. Vérifiez-les : envoyer la demande confirme la destination, la période, la durée et les voyageurs.`
+            ? `Les éléments marqués « ${STATUS_LABELS.inferred} » n’ont pas été confirmés. Vérifiez-les : envoyer la demande confirme la destination, la période, la durée, les voyageurs et le budget.`
             : "Vérifiez les informations avant d’envoyer."}
         </CardDescription>
       </CardHeader>

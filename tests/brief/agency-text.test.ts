@@ -47,10 +47,14 @@ describe("labels", () => {
     ).toMatch(/^1\s500\s€ par personne hors vols internationaux$/u);
   });
 
-  it("formats budget when neither ideal nor max is set", () => {
-    expect(formatBudget({ currency: "EUR", basis: "perPersonExcludingInternationalFlights" })).toBe(
-      "à préciser",
-    );
+  it("formats a budget the traveller leaves to the agency", () => {
+    expect(
+      formatBudget({
+        declined: true,
+        currency: "EUR",
+        basis: "perPersonExcludingInternationalFlights",
+      }),
+    ).toBe("à définir avec l’agence");
   });
 });
 
@@ -101,7 +105,8 @@ describe("renderAgencyText", () => {
     const brief = mergeBrief(
       decidedBrief,
       tripBriefPatchSchema.parse({
-        interests: ["street food", "baie d'Halong", "rizières", "plongée", "marchés", "trek"],
+        // Five wishes plus the fixture's departure country: one line over the five shown.
+        interests: ["street food", "baie d'Halong", "rizières", "plongée", "marchés"],
       }),
     );
     const text = renderAgencyText(brief, today);
@@ -127,7 +132,7 @@ describe("renderAgencyText", () => {
       }),
     );
     const text = renderAgencyText(brief, today);
-    expect(text).toContain("… 3 autres points dans le détail technique");
+    expect(text).toContain("… 4 autres points dans le détail technique");
   });
 
   it("flags a departure within 30 days", () => {

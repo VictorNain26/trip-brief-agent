@@ -266,8 +266,12 @@ in the history, then re-validated by `tripBriefSchema`. Each tracked field is
 `mergeBrief` is a pure function: a patch replaces a scalar or a whole array, `null` clears a field,
 a field named in `resolves` replaces its value and closes the matching contradiction, and a
 `confirmed` value replaced without `resolves` opens a contradiction instead of overwriting.
-`confirmMandatoryFields` promotes destination, dates, duration and travellers to `confirmed` when
-the recap is approved.
+`confirmMandatoryFields` promotes destination, dates, duration, travellers and budget to
+`confirmed` when the recap is approved.
+
+The budget is either an amount or `declined: true`, when the traveller prefers to settle it with the
+agency; a declined budget needs the traveller's words as `evidence`. `missingForRecap` waits for
+one of the two, so the recap cannot be reached with the budget question skipped.
 
 `briefVersion` is the first 16 hex characters of the SHA-256 of the serialised brief;
 `JSON.stringify` is stable here because every brief comes out of `tripBriefSchema.parse`, which

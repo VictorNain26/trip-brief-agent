@@ -116,7 +116,7 @@ export function applyPatch(
 
 // Approving the recap confirms what the agency will read. The promotion has to be applied here
 // rather than only in the tool result, because the state is rebuilt from the history on every
-// request: a send that did not leave a trace would let the four fields fall back to `inferred`.
+// request: a send that did not leave a trace would let the mandatory fields fall back to `inferred`.
 export function applySend(state: ConversationState): TripBrief {
   state.brief = confirmMandatoryFields(state.brief);
   return state.brief;

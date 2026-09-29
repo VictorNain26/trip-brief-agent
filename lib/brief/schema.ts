@@ -71,12 +71,19 @@ const travelersValue = z.object({
   quoteBasis: z.string().max(120).optional(),
 });
 
-const budgetValue = z.object({
-  ideal: z.number().int().positive().optional(),
-  max: z.number().int().positive().optional(),
-  currency: z.literal("EUR"),
-  basis: z.literal("perPersonExcludingInternationalFlights"),
-});
+// A budget is either an amount or the traveller's choice to leave it to the agency (`declined`):
+// the recap waits for one of the two, so a skipped question cannot pass for an answered one.
+const budgetValue = z
+  .object({
+    ideal: z.number().int().positive().optional(),
+    max: z.number().int().positive().optional(),
+    declined: z.literal(true).optional(),
+    currency: z.literal("EUR"),
+    basis: z.literal("perPersonExcludingInternationalFlights"),
+  })
+  .refine((b) => (b.declined === true) !== (b.ideal !== undefined || b.max !== undefined), {
+    error: "budget needs an amount (ideal or max), or declined: true, and not both",
+  });
 
 const trackedSchemas = {
   destination: tracked(destinationValue),
@@ -84,7 +91,10 @@ const trackedSchemas = {
   duration: tracked(durationValue),
   travelers: tracked(travelersValue),
   projectMaturity: tracked(z.enum(["inspiration", "planning", "bookingSoon"])),
-  budget: tracked(budgetValue),
+  // A declined budget carries the traveller's words: the model cannot decline on their behalf.
+  budget: tracked(budgetValue).refine((b) => !b.value.declined || Boolean(b.evidence), {
+    error: "a declined budget needs the traveller's words as evidence",
+  }),
   occasion: tracked(z.string().max(80)),
   departureCountry: tracked(z.string().max(60)),
   rhythm: tracked(z.enum(["singleBase", "fewStops", "frequentMoves", "unknown"])),

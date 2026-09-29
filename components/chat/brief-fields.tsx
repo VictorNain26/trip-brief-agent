@@ -11,11 +11,11 @@ export const MANDATORY: readonly TrackedFieldName[] = [
   "dates",
   "duration",
   "travelers",
+  "budget",
 ];
 
 const USEFUL = [
   "projectMaturity",
-  "budget",
   "occasion",
   "departureCountry",
   "rhythm",
