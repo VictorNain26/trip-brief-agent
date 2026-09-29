@@ -30,6 +30,10 @@ the local network.
 CI runs, in this order, `pnpm lint`, `pnpm format:check`, `pnpm typecheck` (which generates the
 route types with `next typegen` first), `pnpm test` and `pnpm build`.
 
+`pnpm eval` plays six scripted conversations against the real model and search, with the keys of
+`.env.local`, and writes the transcripts, token usage and cost to `.eval/report.md`. It is billed
+(about $0.30 a run) and never runs in CI.
+
 ## How it works
 
 `app/api/chat/route.ts` → `lib/agent/chat.ts` (the agentic loop) → `lib/agent/tools.ts` (six

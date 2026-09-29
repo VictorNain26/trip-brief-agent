@@ -365,6 +365,13 @@ server tool and each of its gates with Tavily mocked, the conversation state and
 route's body limits, and the streaming handler driven by `MockLanguageModelV4` from `ai/test`. CI
 runs lint, format check, typecheck, tests and build on every push and pull request.
 
+`pnpm eval` (`tests/eval/`) measures behaviour against the real model and Tavily. Each scenario
+scripts the traveller's turns; the harness drives `createChatResponse` the way the browser does
+(automatic re-posts, free text answering a pending choice, recap approval) and checks outcomes a
+traveller or an agency would notice: what the brief records, what the cards say, whether the budget
+is asked, whether an injected instruction or the system prompt leaks. It is run by hand before and
+after a behaviour change, since the model's answers vary between runs.
+
 ## Backlog
 
 Not built. Ideas that come up during implementation and are not in scope go here, not into code.
