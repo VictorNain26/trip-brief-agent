@@ -16,6 +16,7 @@ import type { ChatUIMessage } from "@/lib/agent/types";
 import { briefVersion } from "@/lib/brief/version";
 import { decidedBrief, decidedPatch, familyBrief, familyPatch } from "../brief/fixtures";
 import { assistant, user } from "./messages";
+import { chunks } from "./stream";
 
 const today = new Date("2026-09-17T10:00:00Z");
 const search = async () => ({ ok: true as const, results: [] });
@@ -124,13 +125,6 @@ function approvalOutcome(parts: Record<string, unknown>[]) {
 async function run(messages: unknown[], model: MockLanguageModelV4) {
   const response = await createChatResponse(messages, { model, search, today });
   return { response, body: await response.text() };
-}
-
-function chunks(body: string): Record<string, unknown>[] {
-  return body
-    .split("\n")
-    .filter((line) => line.startsWith("data: ") && !line.includes("[DONE]"))
-    .map((line) => JSON.parse(line.slice(6)) as Record<string, unknown>);
 }
 
 const sendAttempt = (version: string) =>
