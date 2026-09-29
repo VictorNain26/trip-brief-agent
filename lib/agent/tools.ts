@@ -138,16 +138,21 @@ export function sendQuoteRequest(state: ConversationState, today: Date, approved
 
 export function createTools({ state, search, photos, today }: ToolDeps) {
   return {
+    // `intro` exists because of Sonnet 5.5: text longer than a sentence or two written before a
+    // tool call comes back as a thinking block (only a summary is ever returned), which the
+    // interface does not render. The question ends the turn, so the answer before it lived there.
     ask_traveler: tool({
       description: [
         "Affiche au voyageur une question à choix (boutons radio ou cases à cocher) et attend sa réponse.",
         "À utiliser quand les réponses possibles sont énumérables : type de voyageurs, mois, durée, rythme, avancement de la réflexion.",
         "Ne pas utiliser pour les envies ou l'âge des enfants (question ouverte en texte).",
         "Une seule question par étape. Le voyageur peut toujours répondre en texte libre.",
+        "intro : ce que vous dites au voyageur juste avant la question, affiché au-dessus d'elle — votre réponse à sa question s'il en a posé une, ou une phrase de contexte ; markdown simple. Un texte de plus d'une phrase écrit hors de l'outil juste avant l'appel ne lui est pas affiché : il va dans intro.",
         "Exemple : question 'Combien de temps souhaitez-vous partir ?', options [{id:'1w',label:'1 semaine'},{id:'2w',label:'2 semaines'}], multiSelect:false.",
         "Réponse : { selected: [ids] } ou { freeText }.",
       ].join(" "),
       inputSchema: z.object({
+        intro: z.string().max(1200).optional(),
         question: z.string().min(3).max(200),
         options: z
           .array(

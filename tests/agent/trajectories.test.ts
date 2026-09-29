@@ -436,6 +436,30 @@ describe("two destination cards carry the choice themselves", () => {
   });
 });
 
+describe("an answer the traveller must read before a choice question", () => {
+  // Fails if the question's intro stops reaching the browser: the answer to « c'est où ? » written
+  // before the question would again be a thinking block the interface never shows.
+  it("reaches the browser in the question's intro", async () => {
+    const intro = "Zanzibar est un archipel de Tanzanie, dans l’océan Indien.";
+    const { body } = await run(
+      [user("1", "C’est où Zanzibar ?")],
+      scriptedModel(
+        toolCall("a1", "ask_traveler", {
+          intro,
+          question: "Qui partirait avec vous ?",
+          options: [
+            { id: "couple", label: "En couple" },
+            { id: "family", label: "En famille" },
+          ],
+          multiSelect: false,
+        }),
+      ),
+    );
+    const question = chunks(body).find((c) => c.type === "tool-input-available");
+    expect(question).toMatchObject({ toolName: "ask_traveler", input: { intro } });
+  });
+});
+
 describe("a decided traveller reaches the send without being questioned again", () => {
   // Fails if a gate becomes stricter than the four mandatory fields — the traveller who gave
   // everything in one message would be asked for more instead of reaching the recap.

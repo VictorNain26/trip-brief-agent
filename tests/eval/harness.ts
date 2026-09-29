@@ -191,11 +191,16 @@ export function toolParts(messages: ChatUIMessage[], tool: string) {
     .filter((part) => part.type === `tool-${tool}`);
 }
 
+// What the traveller reads from the agent: its text parts and the intro above each question.
 export function assistantTexts(messages: ChatUIMessage[]): string[] {
   return messages
     .filter((message) => message.role === "assistant")
     .flatMap((message) => message.parts)
-    .flatMap((part) => (part.type === "text" ? [part.text] : []));
+    .flatMap((part) => {
+      if (part.type === "text") return [part.text];
+      if (part.type === "tool-ask_traveler" && part.input?.intro) return [part.input.intro];
+      return [];
+    });
 }
 
 export function cost(calls: CallUsage[]): number {
@@ -213,6 +218,10 @@ export function cost(calls: CallUsage[]): number {
 
 function describePart(part: Part): string | undefined {
   if (part.type === "text") return `  « ${part.text.replace(/\s+/g, " ").slice(0, 220)} »`;
+  if (part.type === "tool-ask_traveler" && part.input?.intro) {
+    const intro = `  intro « ${part.input.intro.replace(/\s+/g, " ").slice(0, 300)} »`;
+    return `${intro}\n  [ask_traveler] ${part.state} ${part.input.question}`;
+  }
   if (!part.type.startsWith("tool-")) return undefined;
   const tool = part as { type: string; state: string; input?: unknown; output?: unknown };
   const input = JSON.stringify(tool.input ?? {}).slice(0, 180);
