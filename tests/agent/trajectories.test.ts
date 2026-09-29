@@ -8,7 +8,7 @@ import {
 } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { createChatResponse, MAX_STEPS } from "@/lib/agent/chat";
-import { prepareModelMessages } from "@/lib/agent/conversation";
+import { prepareModelMessages, TYPED_REPLY_REASON } from "@/lib/agent/conversation";
 import { createState } from "@/lib/agent/state";
 import { createTools } from "@/lib/agent/tools";
 import { GENERIC_STREAM_ERROR_MESSAGE, RATE_LIMITED_MESSAGE } from "@/lib/agent/stream-errors";
@@ -146,6 +146,15 @@ const respondedSend = (
     state: "approval-responded",
     input: { briefVersion: version },
     approval: { id: "a1", ...approval },
+  }) as unknown as ChatUIMessage["parts"][number];
+
+const pendingSend = (version: string): ChatUIMessage["parts"][number] =>
+  ({
+    type: "tool-propose_quote_request",
+    toolCallId: "q1",
+    state: "approval-requested",
+    input: { briefVersion: version },
+    approval: { id: "a1" },
   }) as unknown as ChatUIMessage["parts"][number];
 
 const approvedSend = (version: string) => respondedSend(version, { approved: true });
@@ -480,6 +489,28 @@ describe("a decided traveller reaches the send without being questioned again", 
     expect(parts.some((c) => c.type === "tool-input-start" && c.toolName === "ask_traveler")).toBe(
       false,
     );
+  });
+});
+
+describe("a traveller who writes instead of using the recap", () => {
+  // Fails if the unanswered recap reaches the model as it is: the AI SDK throws
+  // MissingToolResultsError on a tool call left without a result before the next user message, and
+  // "Réessayer" replays the same history, so the conversation can never resume.
+  it("answers the message and hands the model the recap as refused", async () => {
+    const version = briefVersion(decidedBrief);
+    const model = scriptedModel(text("Trois semaines, c’est noté."));
+    const { response, body } = await run(
+      [
+        user("1", "Vietnam, 3 semaines en novembre, on est 2, budget ~4000€"),
+        assistant("2", [briefUpdate(decidedPatch, version), pendingSend(version)]),
+        user("3", "Finalement plutôt deux semaines"),
+      ],
+      model,
+    );
+    expect(response.status).toBe(200);
+    expect(chunks(body).some((c) => c.type === "error")).toBe(false);
+    expect(body).toContain("c’est noté");
+    expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain(TYPED_REPLY_REASON);
   });
 });
 

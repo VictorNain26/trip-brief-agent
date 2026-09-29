@@ -13,7 +13,8 @@ import type { TripBrief } from "@/lib/brief/schema";
 
 type Props = {
   brief: TripBrief;
-  onRespond: (approved: boolean, reason?: "modifier" | "abandon") => void;
+  // Absent once the traveller has written past this recap: the server has resolved it as refused.
+  onRespond?: (approved: boolean, reason?: "modifier" | "abandon") => void;
 };
 
 export function RecapCard({ brief, onRespond }: Props) {
@@ -53,13 +54,21 @@ export function RecapCard({ brief, onRespond }: Props) {
         <p className="text-xs text-muted-foreground">Prototype&nbsp;: l’envoi est simulé.</p>
       </CardContent>
       <CardFooter className="flex flex-wrap gap-2">
-        <Button onClick={() => onRespond(true)}>Envoyer</Button>
-        <Button variant="outline" onClick={() => onRespond(false, "modifier")}>
-          Modifier
-        </Button>
-        <Button variant="ghost" onClick={() => onRespond(false, "abandon")}>
-          Abandonner
-        </Button>
+        {onRespond ? (
+          <>
+            <Button onClick={() => onRespond(true)}>Envoyer</Button>
+            <Button variant="outline" onClick={() => onRespond(false, "modifier")}>
+              Modifier
+            </Button>
+            <Button variant="ghost" onClick={() => onRespond(false, "abandon")}>
+              Abandonner
+            </Button>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Ce récapitulatif n’a pas été envoyé&nbsp;: vous avez répondu dans la conversation.
+          </p>
+        )}
       </CardFooter>
     </Card>
   );

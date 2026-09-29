@@ -153,6 +153,12 @@ The recap is the only approval point. `propose_quote_request` is gated twice: th
 callback decides whether the traveller is even asked, and `sendQuoteRequest` re-checks before
 sending, from the tool's `execute` or from the closing turn. A successful send ends the turn there.
 
+The traveller can also write instead of clicking. The AI SDK rejects a tool call left without a
+result before the next user message (`MissingToolResultsError`), so `prepareModelMessages` resolves
+every recap still awaiting approval before the last message as refused, with a reason telling the
+model to take the message into account. On the client, only the last message's recap keeps its
+buttons (`pendingApproval`); an earlier one says it was not sent.
+
 ```mermaid
 sequenceDiagram
   participant B as Browser
@@ -172,6 +178,10 @@ sequenceDiagram
     else "Modifier" / "Abandonner"
       B->>S: denied, reason "modifier" or "abandon"
       M-->>B: asks what to change, or closes without sending
+    else traveller writes a message
+      B->>S: new user message after the pending recap
+      S->>S: recap resolved as refused (typed reply)
+      M-->>B: takes the message into account
     end
   end
 ```

@@ -113,14 +113,34 @@ async function withTrustedToolOutputs(
 ): Promise<ChatUIMessage[]> {
   const state = createState();
   const trusted: ChatUIMessage[] = [];
-  for (const message of messages) {
+  const last = messages.length - 1;
+  for (const [index, message] of messages.entries()) {
     const parts: ChatPart[] = [];
     for (const part of partsInStepOrder(message, state)) {
-      parts.push(await trustPart(part, state, today));
+      const trustedPart = await trustPart(part, state, today);
+      parts.push(index < last ? resolvedByTypedReply(trustedPart) : trustedPart);
     }
     trusted.push({ ...message, parts });
   }
   return trusted;
+}
+
+export const TYPED_REPLY_REASON =
+  "Le voyageur a répondu par écrit au lieu d’utiliser le récapitulatif : tenez compte de son message.";
+
+// A recap still awaiting approval before the last message means the traveller wrote instead of
+// using its buttons. The AI SDK rejects a tool call left without a result or an approval response
+// before the next user message (MissingToolResultsError), so the call is resolved as the refusal
+// it is.
+function resolvedByTypedReply(part: ChatPart): ChatPart {
+  if (part.type !== "tool-propose_quote_request" || part.state !== "approval-requested") {
+    return part;
+  }
+  return {
+    ...part,
+    state: "approval-responded",
+    approval: { id: part.approval.id, approved: false, reason: TYPED_REPLY_REASON },
+  };
 }
 
 // Provenance and the family health check are judged against the searches this replay has seen,
