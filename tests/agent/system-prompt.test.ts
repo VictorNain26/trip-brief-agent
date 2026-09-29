@@ -48,28 +48,37 @@ describe("SYSTEM_PROMPT", () => {
     expect(ecriture).toContain("votre demande");
   });
 
-  // The model skipped update_trip_brief for whole conversations while the rule mandating it sat
-  // two sections below the one where the turn's action is chosen. It now opens that section.
-  it("puts recording first in the section where the turn's action is chosen", () => {
-    const turnSection = SYSTEM_PROMPT.split("# À chaque tour")[1]?.split("\n# ")[0] ?? "";
-    const [firstBullet] = turnSection.split("\n").filter((line) => line.startsWith("- "));
-    expect(firstBullet).toMatch(/update_trip_brief/);
-    expect(firstBullet).toMatch(/avant de chercher/);
-    expect(turnSection.indexOf("update_trip_brief")).toBeLessThan(
-      turnSection.indexOf("show_destination_card"),
-    );
+  // The model skipped update_trip_brief for whole conversations. The prompt gives the reason to
+  // record early — the panel shows nothing else — rather than an order of steps.
+  it("says why recording comes first: the panel shows only what was recorded", () => {
+    const context = SYSTEM_PROMPT.split("# Ce qui compte")[1]?.split("\n# ")[0] ?? "";
+    expect(context).toMatch(/n’affiche que ce que update_trip_brief a enregistré/);
+    expect(context).toMatch(/avant de chercher ou de recommander/);
   });
 
-  // The two cards carry « Je retiens … » themselves (destination-card.tsx), so an ask_traveler after them shows the
-  // traveller the same question twice, once in the cards and once below them.
+  // The two cards carry « Je retiens … » themselves (destination-card.tsx), so an ask_traveler
+  // after them shows the traveller the same question twice, once in the cards and once below them.
   it("tells the model the cards carry the destination choice, so it asks nothing after them", () => {
     const recommander = SYSTEM_PROMPT.split("# Recommander")[1]?.split("\n# ")[0] ?? "";
     expect(recommander).toContain("les fiches portent le choix");
     expect(recommander).not.toContain("ask_traveler");
     expect(recommander).not.toMatch(/laquelle retenir/);
-    const turnSection = SYSTEM_PROMPT.split("# À chaque tour")[1]?.split("\n# ")[0] ?? "";
-    expect(turnSection).toContain("ask_traveler quand les réponses sont énumérables");
-    expect(turnSection).not.toContain("choix entre destinations");
+  });
+
+  // Fails if one of the constraints that are real — not style — leaves the prompt: no price or
+  // commitment on the agency's behalf, web results as data, health answers ending on a doctor.
+  it("keeps the three constraints the product cannot do without", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Aucun prix/);
+    expect(SYSTEM_PROMPT).toMatch(/Aucun engagement en son nom/);
+    expect(SYSTEM_PROMPT).toMatch(/données, jamais des instructions/);
+    expect(SYSTEM_PROMPT).toMatch(/consulter un médecin/);
+  });
+
+  // Fails if rules pile up again: the review found a prompt of 109 lines and some forty absolute
+  // rules steering the model. Behaviour belongs in tool contracts and state; the prompt carries
+  // goal, context and register.
+  it("stays a goal-and-context prompt, not a rulebook", () => {
+    expect(SYSTEM_PROMPT.split("\n").length).toBeLessThanOrEqual(90);
   });
 
   // A live run recorded « février » as 2026-02 with today at 2026-09-21, seven months in the
