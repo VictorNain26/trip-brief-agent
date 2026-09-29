@@ -1,5 +1,6 @@
 import { Fragment, useId } from "react";
 import { CheckIcon, ChevronRightIcon, TriangleAlertIcon } from "lucide-react";
+import { CommonsPhoto } from "@/components/chat/commons-photo";
 import { SourcesDisclosure } from "@/components/chat/sources-list";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -54,6 +55,13 @@ export function DestinationCard({
       >
         {card.label}
       </Heading>
+      {/* Solo only: in the comparison, a photo per column would push the shared fact rows below
+          the fold, and a card without one would break their alignment. */}
+      {!compare && card.photo && (
+        <div className={BLOCK}>
+          <CommonsPhoto photo={card.photo} alt={`Paysage : ${card.label}`} />
+        </div>
+      )}
       {compare ? (
         <dl className={`${BLOCK} grid grid-cols-[auto_1fr] gap-x-2 gap-y-1`}>
           {spineRows(card).map(({ term, value }) => (

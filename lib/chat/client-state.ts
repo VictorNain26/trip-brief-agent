@@ -35,6 +35,7 @@ const PENDING_STATUS = "Réponse en cours…";
 const TOOL_STATUS: Partial<Record<ChatUIMessage["parts"][number]["type"], string>> = {
   "tool-search_web": "Recherche en cours…",
   "tool-show_destination_card": "Préparation de la fiche destination…",
+  "tool-show_photos": "Recherche de photos…",
   "tool-update_trip_brief": "Mise à jour de votre voyage…",
   "tool-propose_quote_request": "Préparation du récapitulatif…",
 };

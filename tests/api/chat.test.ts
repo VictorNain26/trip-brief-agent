@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/env", () => ({
+vi.mock("@/lib/env", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/env")>()),
   readServerEnv: () => ({
     ANTHROPIC_API_KEY: "sk-ant-test",
     TAVILY_API_KEY: "tvly-test",
+    WIKIMEDIA_CONTACT: "test@example.org",
   }),
 }));
 

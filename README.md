@@ -17,6 +17,8 @@ The app runs from this repository. It needs Node 24 (`.nvmrc`), pnpm (version pi
   the Console's Billing page
   ([rate limits](https://platform.claude.com/docs/en/api/rate-limits#setting-your-own-spend-limit)).
 - `TAVILY_API_KEY` — Tavily has a free tier.
+- `WIKIMEDIA_CONTACT` (optional) — a URL or an email for the User-Agent Wikimedia asks API clients
+  to send; it defaults to this repository.
 
 ```sh
 cp .env.example .env.local   # fill both keys
@@ -43,8 +45,10 @@ tools); the client is `components/chat/`. Three capabilities carry the conversat
   main input.
 - _Web search_: `search_web`, restricted to official domains for health and formalities. Its sources
   sit where the search happened, behind a collapsed « N sources consultées · requête » line.
-- _Visual content_: `show_destination_card`. One card carries a map behind « Situer sur la carte ».
-  Two cards in the same turn are compared side by side under « Laquelle retenez-vous ? », row
+- _Visual content_: `show_destination_card` and `show_photos`. One card carries a photo from
+  Wikimedia Commons, credited with its author and licence, and a map behind « Situer sur la carte »;
+  `show_photos` shows a subject the traveller wants to picture (orangutans, Stone Town). Two cards
+  in the same turn are compared side by side under « Laquelle retenez-vous ? », row
   against row, each with its own « Je retiens {label} » button; the cards carry the choice, and the
   prompt forbids a question after them.
 
@@ -63,8 +67,9 @@ approved send ends the turn on the sent card, without calling the model again.
 - [ADRs](docs/adr/) — the [stack](docs/adr/0001-stack.md), the [model](docs/adr/0008-sonnet-5-5.md) (superseding [0002](docs/adr/0002-model.md)),
   the [stateless brief](docs/adr/0003-stateless-brief.md), [search](docs/adr/0004-search.md),
   [guidance from the brief's state](docs/adr/0009-guidance-from-brief-state.md) (superseding the
-  [lazy guides](docs/adr/0005-lazy-guides.md)), [portability](docs/adr/0006-portability.md) and
-  [no internals in the interface](docs/adr/0007-no-internals-in-the-interface.md).
+  [lazy guides](docs/adr/0005-lazy-guides.md)), [portability](docs/adr/0006-portability.md),
+  [no internals in the interface](docs/adr/0007-no-internals-in-the-interface.md) and
+  [photos from Wikimedia Commons](docs/adr/0010-wikimedia-photos.md).
 
 ## What the interface does not say
 
