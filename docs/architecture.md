@@ -113,7 +113,7 @@ Every turn sends the whole UI message history. `POST /api/chat` processes it in 
    calls and results older than the last six messages, and an `ephemeral` `cacheControl` breakpoint
    is set on the last message.
 7. **`streamText`** — `claude-sonnet-5-5`, `effort: "medium"`, `fallbacks: "default"`, the cached system prompt as
-   `instructions`, the five tools, `toolApproval` on `propose_quote_request`,
+   `instructions`, the six tools, `toolApproval` on `propose_quote_request`,
    `stopWhen: isStepCount(10)`, and `prepareStep` forcing `toolChoice: "none"` on the last step so
    the cap ends in a French sentence rather than a truncated tool call. `onError` logs the error
    name and, for an `APICallError`, the status code only — never conversation content.
@@ -198,7 +198,7 @@ sequenceDiagram
 
 ## Tools
 
-Five tools, each mapping to one capability of the agent. The count is deliberate: the
+Six tools, each mapping to one capability of the agent. The count is deliberate: the
 Claude Certified Architect exam guide (Foundations, task 2.3) warns that too many tools degrade
 selection (18 tools versus 4–5 in its example). Every description states the input format, when to
 use the tool and when not to. Inputs are validated with zod on the server even under strict tool
@@ -213,7 +213,8 @@ tool calls stay enabled, so a brief update and a search can run in the same step
 | ------------------------ | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `ask_traveler`           | client (no `execute`)       | `question`, `options` (2–6, `{ id, label, description? }`), `multiSelect`; output `{ selected: id[] }` or `{ freeText }`. Free text through the main input always answers the pending question.                                                                                 |
 | `search_web`             | server                      | `query`, `topic: "general" \| "health_formalities"`. Tavily, `searchDepth: "basic"`, timeout 8 s, at most 5 results, snippets truncated to 400 characters; `health_formalities` restricts results to `diplomatie.gouv.fr`, `pasteur.fr`, `who.int`. An empty list is a valid result; a failure is `transient`. |
-| `show_destination_card`  | server                      | `destinationId` (catalogue enum), `region`, `why`, `bestPeriod`, `highlights[]`, `alerts[]`, `sources[{ title, url }]`, `coordinates`, `flightTimeFromParis`, `travelBetter` (one responsible-travel suggestion), `forChildren?` — `region` and `flightTimeFromParis` are required, two cards of a turn being aligned row by row on them. Gates: when family signals exist, `forChildren` and at least one alert (`validation` error naming what to add), every source URL seen in a `search_web` result (`validation` error), and, when family signals exist, a successful `health_formalities` search whose query names the destination — its label or the label with spaces and hyphens removed (« Vietnam » for « Viêt Nam »), compared after folding case, accents and punctuation, as whole words (`business` error naming the search to run). An unknown destination id fails input validation. |
+| `show_destination_card`  | server                      | `destinationId` (catalogue enum), `region`, `why`, `bestPeriod`, `highlights[]`, `alerts[]`, `sources[{ title, url }]`, `coordinates`, `flightTimeFromParis`, `travelBetter` (one responsible-travel suggestion), `forChildren?` — `region` and `flightTimeFromParis` are required, two cards of a turn being aligned row by row on them. Gates: when family signals exist, `forChildren` and at least one alert (`validation` error naming what to add), every source URL seen in a `search_web` result (`validation` error), and, when family signals exist, a successful `health_formalities` search whose query names the destination — its label or the label with spaces and hyphens removed (« Vietnam » for « Viêt Nam »), compared after folding case, accents and punctuation, as whole words (`business` error naming the search to run). An unknown destination id fails input validation. Once the card passes, the server looks up one Commons photo from the destination's English name (`Intl.DisplayNames`); a failed lookup leaves the card without one. |
+| `show_photos`            | server                      | `query` (3–100 characters, in English) → up to 4 Wikimedia Commons photos `{ url, width, height, pageUrl, author, license }`, bitmap thumbnails on `upload.wikimedia.org` or `thumb.wikimedia.org` only, landscape first. The model reads only how many were shown. A Commons failure is `transient`. |
 | `update_trip_brief`      | server                      | A partial patch → `{ ok: true, brief, version, missingForRecap[], familyGuidance? }`. `familyGuidance` is the family guide body, returned once per conversation, on the update that first records children.                                                                       |
 | `propose_quote_request`  | server, behind tool approval| `briefVersion` (16 hex characters). The approval callback denies with the missing items, or the current version when the hash is stale; otherwise the recap card is shown. `execute` re-runs the same `sendDenial` gate, promotes the mandatory fields to `confirmed` in the returned brief and returns it with the agency-readable text. |
 
@@ -276,9 +277,11 @@ The route is stateless and receives the whole history from the browser, so the c
 untrusted.
 
 - `validateUIMessages` checks every tool part's input against its tool's `inputSchema`. It checks
-  an output only where the tool declares an `outputSchema`: four of the five do — `ask_traveler`,
-  `search_web`, `show_destination_card` and `propose_quote_request` — so a forged `search_web`
-  output is a `400` rather than something the route walks. The one that declares none,
+  an output only where the tool declares an `outputSchema`: five of the six do — `ask_traveler`,
+  `search_web`, `show_destination_card`, `show_photos` and `propose_quote_request` — so a forged
+  `search_web` output, or a photo off Wikimedia's image hosts, is a `400` rather than something the
+  route walks. Photos and their credits never reach the model: `toModelOutput` drops the card's
+  photo and turns a `show_photos` output into a fixed count. The one that declares none,
   `update_trip_brief`, has its output replaced before the model call (below), family guidance
   included, as does `show_destination_card`. That leaves `propose_quote_request`: its output is shaped by a
   schema but not recomputed, and the server reads it — a `{ ok: true }` one makes both
@@ -324,7 +327,7 @@ untrusted.
   ([backlog](#backlog)), which makes the history the server's rather than the client's.
 
 - In the browser: a Content Security Policy (`next.config.ts`) limits images to `'self' data:` and
-  frames to `https://www.openstreetmap.org`, forbids framing the app, and is served with
+  Wikimedia's two image hosts, and frames to `https://www.openstreetmap.org`, forbids framing the app, and is served with
   `X-Content-Type-Options: nosniff`; `<Streamdown disallowedElements={["img"]}>` drops markdown
   images outright, so an injected image URL cannot become a request; and the map iframe runs with
   `sandbox="allow-scripts"` and `referrerPolicy="no-referrer"`.

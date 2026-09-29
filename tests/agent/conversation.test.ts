@@ -18,6 +18,7 @@ const today = new Date("2026-09-17T10:00:00Z");
 const tools = createTools({
   state: createState(),
   search: async () => ({ ok: true, results: [] }),
+  photos: async () => ({ ok: true, photos: [] }),
   today,
 });
 

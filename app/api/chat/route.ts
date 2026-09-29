@@ -1,8 +1,9 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { createChatResponse, MODEL_ID } from "@/lib/agent/chat";
+import { createPhotoSearch } from "@/lib/agent/photos";
 import { createSearch } from "@/lib/agent/search";
-import { readServerEnv } from "@/lib/env";
+import { readServerEnv, wikimediaUserAgent } from "@/lib/env";
 
 export const maxDuration = 120;
 
@@ -21,7 +22,12 @@ export async function POST(request: Request) {
   }
   return createChatResponse(
     body.data.messages,
-    { model: anthropic(MODEL_ID), search: createSearch(env.TAVILY_API_KEY), today: new Date() },
+    {
+      model: anthropic(MODEL_ID),
+      search: createSearch(env.TAVILY_API_KEY),
+      photos: createPhotoSearch(wikimediaUserAgent(env.WIKIMEDIA_CONTACT)),
+      today: new Date(),
+    },
     request.signal,
   );
 }

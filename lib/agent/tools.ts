@@ -1,6 +1,13 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { toolErrorSchema, toolFailure } from "@/lib/agent/errors";
+import {
+  MAX_PHOTOS,
+  photoOutcomeSchema,
+  photoSchema,
+  type Photo,
+  type PhotoFn,
+} from "@/lib/agent/photos";
 import { searchOutcomeSchema, type SearchFn } from "@/lib/agent/search";
 import {
   applySend,
@@ -17,7 +24,11 @@ import { hasFamilySignals } from "@/lib/brief/readiness";
 import { destinationIdSchema, tripBriefPatchSchema, tripBriefSchema } from "@/lib/brief/schema";
 import { destinationLabel } from "@/lib/catalogue";
 
-type ToolDeps = { state: ConversationState; search: SearchFn; today: Date };
+type ToolDeps = { state: ConversationState; search: SearchFn; photos: PhotoFn; today: Date };
+
+// Commons is searched in English: catalogue labels are French (« Viêt Nam »), and most file
+// titles and descriptions are not.
+const ENGLISH_NAMES = new Intl.DisplayNames(["en"], { type: "region" });
 
 // `renderAgencyText` over a brief maxed out on every bounded string and array measures 7 055
 // characters, so this caps a forged value without ever cutting a real one.
@@ -46,12 +57,16 @@ const destinationCardOutputSchema = z.discriminatedUnion("ok", [
     card: z.strictObject({
       ...destinationCardInputSchema.shape,
       label: z.string().max(80),
+      photo: photoSchema.optional(),
     }),
   }),
   z.strictObject({ ok: z.literal(false), error: toolErrorSchema }),
 ]);
 
-export type DestinationCard = z.infer<typeof destinationCardInputSchema> & { label: string };
+export type DestinationCard = z.infer<typeof destinationCardInputSchema> & {
+  label: string;
+  photo?: Photo;
+};
 
 type DestinationCardInput = z.infer<typeof destinationCardInputSchema>;
 type DestinationCardOutput = z.infer<typeof destinationCardOutputSchema>;
@@ -121,7 +136,7 @@ export function sendQuoteRequest(state: ConversationState, today: Date, approved
   return { ok: true as const, brief, agencyText: renderAgencyText(brief, today) };
 }
 
-export function createTools({ state, search, today }: ToolDeps) {
+export function createTools({ state, search, photos, today }: ToolDeps) {
   return {
     ask_traveler: tool({
       description: [
@@ -185,7 +200,43 @@ export function createTools({ state, search, today }: ToolDeps) {
       ].join(" "),
       inputSchema: destinationCardInputSchema,
       outputSchema: destinationCardOutputSchema,
-      execute: async (card) => buildDestinationCard(state, card),
+      execute: async (card): Promise<DestinationCardOutput> => {
+        const output = buildDestinationCard(state, card);
+        if (!output.ok) return output;
+        // The photo is looked up here, from the catalogue, never from the model's input; a failed
+        // lookup leaves the card without one.
+        const found = await photos(`${ENGLISH_NAMES.of(card.destinationId)} landscape`, 1);
+        const photo = found.ok ? found.photos[0] : undefined;
+        return photo ? { ok: true, card: { ...output.card, photo } } : output;
+      },
+      // The model never sees the photo: it is for the traveller, and its credit comes from a third
+      // party. Leaving it out also keeps the replayed card, rebuilt without one, byte-identical.
+      toModelOutput: ({ output }) => {
+        if (!output.ok) return { type: "json", value: output };
+        const card = { ...destinationCardFields(output.card), label: output.card.label };
+        return { type: "json", value: { ok: true, card } };
+      },
+    }),
+
+    show_photos: tool({
+      description: [
+        `Montre au voyageur jusqu'à ${MAX_PHOTOS} photos d'un sujet ou d'un lieu (Wikimedia Commons, sous licence libre, avec auteur et licence affichés), quand voir l'aide à se projeter : un animal, un paysage, un site, une ville.`,
+        "query : courte, concrète et en anglais, par exemple « orangutan Borneo » ou « Zanzibar Stone Town ».",
+        "Une fiche destination porte déjà sa propre photo : show_photos sert à un sujet précis, pas à répéter la fiche.",
+        "Renvoie seulement le nombre de photos affichées ; si aucune n'est trouvée ou si le service échoue, continuer sans photo.",
+      ].join(" "),
+      inputSchema: z.object({ query: z.string().min(3).max(100) }),
+      outputSchema: photoOutcomeSchema,
+      execute: async ({ query }) => photos(query, MAX_PHOTOS),
+      // Fixed text only: the credits come from the client on every later turn, and a forged one
+      // must not become an instruction to the model.
+      toModelOutput: ({ output }) => ({
+        type: "text",
+        value:
+          output.ok && output.photos.length > 0
+            ? `${output.photos.length} photo(s) affichée(s) au voyageur.`
+            : "Aucune photo affichée.",
+      }),
     }),
 
     update_trip_brief: tool({

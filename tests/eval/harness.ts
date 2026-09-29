@@ -4,8 +4,10 @@ import { anthropic } from "@ai-sdk/anthropic";
 import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
 import { readUIMessageStream, wrapLanguageModel, type UIMessageChunk } from "ai";
 import { createChatResponse, MODEL_ID } from "@/lib/agent/chat";
+import { createPhotoSearch } from "@/lib/agent/photos";
 import { createSearch, type SearchFn } from "@/lib/agent/search";
 import type { ChatUIMessage } from "@/lib/agent/types";
+import { readServerEnv, wikimediaUserAgent } from "@/lib/env";
 import {
   answerPendingQuestions,
   pendingApproval,
@@ -15,7 +17,14 @@ import { chunks } from "../agent/stream";
 
 export type TravellerTurn = { say: string } | { approve: boolean; reason?: "modifier" | "abandon" };
 
-type CallUsage = { noCache: number; cacheRead: number; cacheWrite: number; output: number };
+type CallUsage = {
+  noCache: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+  /** Thinking text the model returned: the route never sends it to the browser. */
+  reasoning: string;
+};
 
 export type Run = {
   messages: ChatUIMessage[];
@@ -48,14 +57,17 @@ function recordingModel(calls: CallUsage[]) {
     middleware: {
       wrapStream: async ({ doStream }) => {
         const { stream, ...rest } = await doStream();
+        let reasoning = "";
         const recorder = new TransformStream<LanguageModelV4StreamPart, LanguageModelV4StreamPart>({
           transform(part, controller) {
+            if (part.type === "reasoning-delta") reasoning += part.delta;
             if (part.type === "finish") {
               calls.push({
                 noCache: part.usage.inputTokens.noCache ?? 0,
                 cacheRead: part.usage.inputTokens.cacheRead ?? 0,
                 cacheWrite: part.usage.inputTokens.cacheWrite ?? 0,
                 output: part.usage.outputTokens.total ?? 0,
+                reasoning,
               });
             }
             controller.enqueue(part);
@@ -130,6 +142,7 @@ export async function converse(
   const deps = {
     model: recordingModel(calls),
     search: options.search ? options.search(base) : base,
+    photos: createPhotoSearch(wikimediaUserAgent(readServerEnv().WIKIMEDIA_CONTACT)),
     today: new Date(),
   };
   const started = Date.now();
@@ -236,6 +249,10 @@ export function report(name: string, run: Run): void {
   );
   if (run.errors.length > 0) lines.push(`errors: ${run.errors.join(" | ")}`);
   if (run.notes.length > 0) lines.push(`notes: ${run.notes.join(" | ")}`);
+  run.calls.forEach((call, index) => {
+    const text = call.reasoning.replace(/\s+/g, " ").trim();
+    if (text) lines.push(`  thinking ${index + 1}: ${text.slice(0, 300)}`);
+  });
   // A file rather than the console: the reporter drops the console output of passing tests.
   appendFileSync(REPORT_PATH, `${lines.join("\n")}\n`);
 }

@@ -17,6 +17,7 @@ import {
   deriveConversationState,
   prepareModelMessages,
 } from "@/lib/agent/conversation";
+import type { PhotoFn } from "@/lib/agent/photos";
 import type { SearchFn } from "@/lib/agent/search";
 import { createState, sendDenial, type ConversationState } from "@/lib/agent/state";
 import { GENERIC_STREAM_ERROR_MESSAGE, RATE_LIMITED_MESSAGE } from "@/lib/agent/stream-errors";
@@ -27,7 +28,7 @@ import type { ChatUIMessage, ToolPart } from "@/lib/agent/types";
 export const MODEL_ID = "claude-sonnet-5-5";
 export const MAX_STEPS = 10;
 
-type ChatDeps = { model: LanguageModel; search: SearchFn; today: Date };
+type ChatDeps = { model: LanguageModel; search: SearchFn; photos: PhotoFn; today: Date };
 
 export function approvalFor(state: ConversationState, today: Date) {
   return ({ briefVersion: requested }: { briefVersion: string }): ToolApprovalStatus => {
@@ -72,10 +73,10 @@ function sentBriefResponse(
 
 export async function createChatResponse(
   rawMessages: unknown,
-  { model, search, today }: ChatDeps,
+  { model, search, photos, today }: ChatDeps,
   abortSignal?: AbortSignal,
 ): Promise<Response> {
-  const schemaTools = createTools({ state: createState(), search, today });
+  const schemaTools = createTools({ state: createState(), search, photos, today });
   let messages: ChatUIMessage[];
   try {
     messages = await validateUIMessages<ChatUIMessage>({
@@ -107,7 +108,7 @@ export async function createChatResponse(
     if (sent.ok) return sentBriefResponse(messages, approved.toolCallId, sent);
   }
 
-  const tools = createTools({ state, search, today });
+  const tools = createTools({ state, search, photos, today });
   const result = streamText({
     model,
     instructions: {

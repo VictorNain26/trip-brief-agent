@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Streamdown } from "streamdown";
 import { ChoiceCard } from "@/components/chat/choice-card";
+import { PhotoStrip } from "@/components/chat/commons-photo";
 import { DestinationCards } from "@/components/chat/destination-card";
 import { FeasibilityAlert } from "@/components/chat/feasibility-alert";
 import { RecapCard } from "@/components/chat/recap-card";
@@ -80,6 +81,11 @@ export function MessageView({
       // once to put them side by side.
       case "tool-show_destination_card":
         return null;
+      case "tool-show_photos": {
+        if (part.state !== "output-available" || !part.output.ok) return null;
+        if (part.output.photos.length === 0) return null;
+        return <PhotoStrip key={key} photos={part.output.photos} subject={part.input.query} />;
+      }
       case "tool-update_trip_brief": {
         if (part.state !== "output-available" || !part.output.ok) return null;
         const alerts = newFeasibilityAlerts(messages, part.toolCallId);

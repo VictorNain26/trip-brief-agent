@@ -20,6 +20,7 @@ import { chunks } from "./stream";
 
 const today = new Date("2026-09-17T10:00:00Z");
 const search = async () => ({ ok: true as const, results: [] });
+const photos = async () => ({ ok: true as const, photos: [] });
 
 const usage: LanguageModelV4Usage = {
   inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
@@ -114,7 +115,7 @@ function approvalOutcome(parts: Record<string, unknown>[]) {
 }
 
 async function run(messages: unknown[], model: MockLanguageModelV4) {
-  const response = await createChatResponse(messages, { model, search, today });
+  const response = await createChatResponse(messages, { model, search, photos, today });
   return { response, body: await response.text() };
 }
 
@@ -352,7 +353,7 @@ describe("a family card waits for a health search naming the destination", () =>
     expect(card(turn)).toMatchObject(refused);
 
     const replay = [...history, turn!, user("5", "Et alors ?")];
-    const tools = createTools({ state: createState(), search, today });
+    const tools = createTools({ state: createState(), search, photos, today });
     const replayed = (await prepareModelMessages(replay, tools, today))
       .flatMap((message) => (message.role === "tool" ? message.content : []))
       .find((part) => part.type === "tool-result" && part.toolName === "show_destination_card");
@@ -603,6 +604,7 @@ describe("the agent degrades without looping or crashing", () => {
         text("Je n'ai pas pu vérifier."),
       ),
       search: failing,
+      photos,
       today,
     });
     const output = chunks(await response.text()).find((c) => c.type === "tool-output-available");

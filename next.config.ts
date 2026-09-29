@@ -10,7 +10,8 @@ const CSP = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  // Photos come from Wikimedia Commons only (lib/agent/photos.ts), served from these two hosts.
+  "img-src 'self' data: https://upload.wikimedia.org https://thumb.wikimedia.org",
   "font-src 'self'",
   `connect-src 'self'${isDev ? " ws:" : ""}`,
   "frame-src https://www.openstreetmap.org",
