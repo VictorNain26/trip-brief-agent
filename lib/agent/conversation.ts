@@ -114,8 +114,8 @@ async function withTrustedToolOutputs(
   for (const [index, message] of messages.entries()) {
     const parts: ChatPart[] = [];
     for (const part of partsInStepOrder(message, state)) {
-      const trustedPart = await trustPart(part, state, today);
-      parts.push(index < last ? resolvedByTypedReply(trustedPart) : trustedPart);
+      const trustedPart = boundedClientText(await trustPart(part, state, today));
+      parts.push(index < last ? resolvedBeforeNextMessage(trustedPart) : trustedPart);
     }
     trusted.push({ ...message, parts });
   }
@@ -125,19 +125,53 @@ async function withTrustedToolOutputs(
 export const TYPED_REPLY_REASON =
   "Le voyageur a répondu par écrit au lieu d’utiliser le récapitulatif : tenez compte de son message.";
 
-// A recap still awaiting approval before the last message means the traveller wrote instead of
-// using its buttons. The AI SDK rejects a tool call left without a result or an approval response
-// before the next user message (MissingToolResultsError), so the call is resolved as the refusal
-// it is.
-function resolvedByTypedReply(part: ChatPart): ChatPart {
-  if (part.type !== "tool-propose_quote_request" || part.state !== "approval-requested") {
-    return part;
+const TYPED_ANSWER =
+  "Le voyageur a répondu par écrit dans son message suivant au lieu d’utiliser la question.";
+const INTERRUPTED = "L’appel a été interrompu avant d’aboutir.";
+
+// The AI SDK rejects a tool call left without a result or an approval response before the next
+// user message (MissingToolResultsError), and "Réessayer" would replay the same history forever.
+// Before the last message, such a call is resolved as what happened: a recap or a choice question
+// the traveller answered by writing, or a server call whose stream broke before its output.
+function resolvedBeforeNextMessage(part: ChatPart): ChatPart {
+  if (part.type === "tool-propose_quote_request" && part.state === "approval-requested") {
+    return {
+      ...part,
+      state: "approval-responded",
+      approval: { id: part.approval.id, approved: false, reason: TYPED_REPLY_REASON },
+    };
   }
-  return {
-    ...part,
-    state: "approval-responded",
-    approval: { id: part.approval.id, approved: false, reason: TYPED_REPLY_REASON },
-  };
+  if (part.type.startsWith("tool-") && "state" in part && part.state === "input-available") {
+    const errorText = part.type === "tool-ask_traveler" ? TYPED_ANSWER : INTERRUPTED;
+    return { ...part, state: "output-error", errorText } as ChatPart;
+  }
+  return part;
+}
+
+const MAX_ERROR_TEXT_LENGTH = 500;
+const APPROVAL_REASONS = new Set<string>(["modifier", "abandon", TYPED_REPLY_REASON]);
+
+// Two client-sent strings no schema bounds reach the model as tool results: an error's text and a
+// denial's reason. A forged one would be a wall of text dressed as a tool result, past the cap on
+// the traveller's own messages. The error keeps its first lines, the reason must be one the app
+// sends, and a failed call's raw input is not replayed.
+function boundedClientText(part: ChatPart): ChatPart {
+  if (!part.type.startsWith("tool-") || !("state" in part)) return part;
+  if (part.state === "output-error") {
+    return {
+      ...part,
+      errorText: part.errorText.slice(0, MAX_ERROR_TEXT_LENGTH),
+      rawInput: {},
+    } as ChatPart;
+  }
+  if (
+    part.state === "approval-responded" &&
+    part.approval.reason !== undefined &&
+    !APPROVAL_REASONS.has(part.approval.reason)
+  ) {
+    return { ...part, approval: { ...part.approval, reason: undefined } } as ChatPart;
+  }
+  return part;
 }
 
 // Provenance and the family health check are judged against the searches this replay has seen,

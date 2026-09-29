@@ -164,10 +164,12 @@ callback decides whether the traveller is even asked, and `sendQuoteRequest` re-
 sending, from the tool's `execute` or from the closing turn. A successful send ends the turn there.
 
 The traveller can also write instead of clicking. The AI SDK rejects a tool call left without a
-result before the next user message (`MissingToolResultsError`), so `prepareModelMessages` resolves
-every recap still awaiting approval before the last message as refused, with a reason telling the
-model to take the message into account. On the client, only the last message's recap keeps its
-buttons (`pendingApproval`); an earlier one says it was not sent.
+result before the next user message (`MissingToolResultsError`), and "Réessayer" would replay the
+same history forever. Before the last message, `prepareModelMessages` resolves every call still
+waiting: a recap as refused, with a reason telling the model to take the message into account; a
+choice question as answered in writing; a server call whose stream broke before its output (a
+network drop, the route's time limit) as interrupted. On the client, only the last message's recap
+keeps its buttons (`pendingApproval`); an earlier one says it was not sent.
 
 ```mermaid
 sequenceDiagram
@@ -297,6 +299,14 @@ untrusted.
   `deriveConversationState` and the replay run `applySend`, which promotes destination, dates,
   duration and travellers to `confirmed` as an approved recap does. The residual below covers what
   that is worth to the client sending it.
+- Two client-sent strings no schema bounds reach the model as tool results: an `output-error`
+  part's `errorText` and an approval's `reason`. The first is cut to 500 characters (and a failed
+  call's `rawInput` is not replayed), the second must be `"modifier"`, `"abandon"` or the
+  typed-reply reason, otherwise it is dropped.
+- A tab opened before a deploy that changes a tool's contract (a removed tool, a newly required
+  field, the budget's amount-or-declined rule) sends a history `validateUIMessages` refuses, and
+  gets `400 invalid_messages` until « Nouveau voyage ». Nothing is persisted, so no other session
+  is affected.
 - The brief is recomputed from `update_trip_brief` **inputs**; client-sent outputs of that tool
   never reach the model — `prepareModelMessages` overwrites them with the recomputed value.
 - The family guidance on an `update_trip_brief` output is re-read from disk, on the one update that

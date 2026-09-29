@@ -124,7 +124,13 @@ export async function recordPatch(
 ): Promise<UpdateTripBriefOutput> {
   const { output, familyGuidanceDue } = applyPatch(state, today, patch);
   if (!output.ok || !familyGuidanceDue) return output;
-  return { ...output, familyGuidance: await loadFamilyGuide() };
+  // The brief is already updated: a guide that cannot be read must not turn that into a failure
+  // the model would retry, nor diverge from the replay, which records the same patch.
+  try {
+    return { ...output, familyGuidance: await loadFamilyGuide() };
+  } catch {
+    return output;
+  }
 }
 
 // Approving the recap confirms what the agency will read. The promotion has to be applied here

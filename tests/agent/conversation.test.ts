@@ -275,14 +275,18 @@ describe("prepareModelMessages", () => {
     expect(serialized).toContain(TYPED_REPLY_REASON);
   });
 
+  // `resolves` makes each patch replace the travellers rather than open a contradiction, so the
+  // children really leave and come back.
   const familyPatch = {
     travelers: {
       value: { partyType: "family", adults: 2, children: [{ age: 6 }] },
       status: "confirmed",
     },
+    resolves: ["travelers"],
   };
   const couplePatch = {
     travelers: { value: { partyType: "couple", adults: 2, children: [] }, status: "confirmed" },
+    resolves: ["travelers"],
   };
   const FAMILY_GUIDE_LINE = "L'âge de chaque enfant";
 
