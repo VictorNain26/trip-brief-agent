@@ -1,8 +1,18 @@
 # Architecture
 
-This document describes the system as built. Design rationale lives in
-[`docs/specs/2026-09-17-trip-brief-agent-design.md`](specs/2026-09-17-trip-brief-agent-design.md);
-the decisions behind each major choice are in [`docs/adr/`](adr/).
+This document describes the system as built and is the source of truth for its scope. The
+decisions behind each major choice are in [`docs/adr/`](adr/).
+
+## Scope
+
+**Goal.** Turn an undecided traveller's chat into a structured trip brief a local agency can act
+on: destination, period, duration, travellers and budget, each with the traveller's words and
+whether they said it or the agent inferred it.
+
+**In scope.** Choice questions, sourced web search, destination cards, the brief panel, a recap the
+traveller approves, and a simulated send.
+
+**Out of scope.** Itineraries, prices, accounts, persistence and a real send to an agency.
 
 ## Pattern
 
@@ -265,7 +275,8 @@ emits keys in schema order. That hash is what the approval names, so approving a
 a brief that has changed since. It is not shown to the traveller: the recap card is where the brief
 an approval is bound to is reviewed, field by field.
 
-The full field model and the merge rules are in the spec, §5.
+The field model is `tripBriefSchema` in `lib/brief/schema.ts`; the merge rules are in
+`lib/brief/merge.ts`.
 
 ## Threat model
 
@@ -319,7 +330,7 @@ untrusted.
   verbatim, the same injection channel a forged guide body would be if it were not re-read.
   Nothing is persisted and the send is simulated, so the blast radius is the session's own client.
   The answer is server-side persistence per `chatId` accepting only the latest message
-  (spec §15, P1), which makes the history the server's rather than the client's.
+  ([backlog](#backlog)), which makes the history the server's rather than the client's.
 
 - In the browser: a Content Security Policy (`next.config.ts`) limits images to `'self' data:` and
   frames to `https://www.openstreetmap.org`, forbids framing the app, and is served with
@@ -344,15 +355,23 @@ No conversation is logged or sent anywhere other than the model and
 search providers; there is no analytics, no tracker and no tracing in the application. The
 agency-readable text carries only what the agency needs. Model inference runs on Anthropic's
 first-party API with `global` processing; EU inference is a production requirement, not a property
-of this prototype. Tracing requirements for production — EU region, masking of `evidence`,
-`constraints` and `projectSummary`, short retention — are in
-[`docs/observability.md`](observability.md).
+of this prototype. Tracing in production would need an EU region, masking of `evidence`,
+`constraints` and `projectSummary`, and short retention.
 
 ## Testing
 
 Vitest covers the domain logic (schema, merge rules, both gates, catalogue, agency text), every
 server tool and each of its gates with Tavily mocked, the conversation state and its pruning, the
-route's body limits, and the streaming handler driven by `MockLanguageModelV4` from `ai/test`. The
-item-by-item list is §13 of the
-[spec](specs/2026-09-17-trip-brief-agent-design.md). CI runs lint, format check, typecheck, tests
-and build on every push and pull request.
+route's body limits, and the streaming handler driven by `MockLanguageModelV4` from `ai/test`. CI
+runs lint, format check, typecheck, tests and build on every push and pull request.
+
+## Backlog
+
+Not built. Ideas that come up during implementation and are not in scope go here, not into code.
+
+- Server-side persistence per `chatId`, accepting only the latest message from the client.
+- EU inference and a data-processing review.
+- Live agency coverage and minimum budgets instead of the static catalogue and search-based
+  alerts.
+- A real send to an agency, with consent, behind a signed approval.
+- Authentication and per-IP rate limiting before any hosted deployment.
