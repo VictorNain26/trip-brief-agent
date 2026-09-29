@@ -63,7 +63,7 @@ describe("SYSTEM_PROMPT", () => {
     );
   });
 
-  // The two cards carry « Je retiens … » themselves (§8), so an ask_traveler after them shows the
+  // The two cards carry « Je retiens … » themselves (destination-card.tsx), so an ask_traveler after them shows the
   // traveller the same question twice, once in the cards and once below them.
   it("tells the model the cards carry the destination choice, so it asks nothing after them", () => {
     const recommander = SYSTEM_PROMPT.split("# Recommander")[1]?.split("\n# ")[0] ?? "";

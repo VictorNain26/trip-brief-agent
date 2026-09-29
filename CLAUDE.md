@@ -1,7 +1,7 @@
 # Trip-brief agent
 
 Conversational agent that turns an undecided traveller's chat into a structured trip brief
-for a local agency. Design and decisions: `docs/specs/2026-09-17-trip-brief-agent-design.md`.
+for a local agency. Scope, design and backlog: `docs/architecture.md`; decisions: `docs/adr/`.
 
 ## Commands
 
@@ -24,15 +24,14 @@ for a local agency. Design and decisions: `docs/specs/2026-09-17-trip-brief-agen
   AI SDK helpers (`validateUIMessages`, `pruneMessages`, tool approval) for chat plumbing,
   `@tavily/core` for search, `node:crypto` for hashing and constant-time comparison.
 - Agent and UI copy in French with "vous"; code, commits and docs in English.
-- Ideas outside the spec go to its backlog (§15), not into code.
+- Ideas outside the scope go to the backlog in `docs/architecture.md`, not into code.
 
 ## Documents
 
-- The spec is the living source of truth: change it in place and add a row to its revision history.
-- Each batch of work gets its own plan, `docs/plans/YYYY-MM-DD-<subject>.md`. A plan is a dated
-  snapshot, frozen once executed: never rewrite it to match what shipped.
+- `docs/architecture.md` describes the system as built: change it in the same PR as the code.
+- A batch of work carries its plan in the PR description, not in a file.
 - An ADR is immutable. A reversal is a new ADR, and the old one becomes `Status: superseded by NNNN`.
-- When two documents disagree, git history wins over the spec, and the spec wins over a plan.
+- When a document disagrees with the code, the code and its git history win.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

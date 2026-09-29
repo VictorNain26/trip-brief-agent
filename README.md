@@ -13,9 +13,8 @@ Built with Next.js, the AI SDK and Claude Sonnet 5.5, searching with Tavily. It 
 The app runs from this repository. It needs Node 24 (`.nvmrc`), pnpm (version pinned in
 `package.json`) and two keys, listed in `.env.example`:
 
-- `ANTHROPIC_API_KEY` — every turn calls the Claude API and is billed.
-  [docs/product.md](docs/product.md) estimates $0.13–0.27 for a ten-turn conversation. A spend limit
-  can be set on the Console's Billing page
+- `ANTHROPIC_API_KEY` — every turn calls the Claude API and is billed. A spend limit can be set on
+  the Console's Billing page
   ([rate limits](https://platform.claude.com/docs/en/api/rate-limits#setting-your-own-spend-limit)).
 - `TAVILY_API_KEY` — Tavily has a free tier.
 
@@ -52,8 +51,7 @@ approved send ends the turn on the sent card, without calling the model again.
 
 ## Documentation
 
-- [Spec](docs/specs/2026-09-17-trip-brief-agent-design.md) — the living design, with its backlog.
-- [Architecture](docs/architecture.md) — an agentic loop wrapped in deterministic gates the model
+- [Architecture](docs/architecture.md) — scope and backlog, then an agentic loop wrapped in deterministic gates the model
   cannot talk its way past: readiness (which also refuses a period already over), guide
   prerequisites, a health search before a family destination card, catalogue coverage, source
   provenance and the send approval. Includes the `POST /api/chat` lifecycle, the tool table and the
@@ -63,15 +61,6 @@ approved send ends the turn on the sent card, without calling the model again.
   [lazy guides](docs/adr/0005-lazy-guides.md), [portability](docs/adr/0006-portability.md) and
   [no internals in the interface](docs/adr/0007-no-internals-in-the-interface.md), which supersedes
   one clause of 0005.
-- [Product](docs/product.md) — where the "ready to send" threshold sits and why, the production
-  risk of confident wrong advice, and the cost per conversation.
-- [Evaluation](docs/evaluation.md) — a design, not implemented: the readiness decision first, then
-  field extraction, tool choice, grounding and efficiency; scenarios played by a simulated
-  traveller, deterministic assertions plus a judge from another provider, and a model-change rule
-  fixed before the numbers.
-- [Observability](docs/observability.md) — a design, not implemented: Langfuse through the AI
-  SDK's OpenTelemetry integration, one session per conversation, and signals for abandonment,
-  unanswerable requests, grounding, cost and latency.
 
 ## What the interface does not say
 
@@ -98,8 +87,6 @@ The screen carries no prototype notice beyond the simulated send, so these facts
 
 ## Next steps
 
-The prioritised backlog is §15 of the
-[spec](docs/specs/2026-09-17-trip-brief-agent-design.md#15-backlog). First towards production:
-server-side persistence per conversation, EU inference, live agency coverage, the evaluation
-pipeline as a CI gate, a real send behind a signed approval, and tracing as designed. Hosting the
-app would first need authentication and rate limiting.
+The [backlog](docs/architecture.md#backlog) lists what comes next: server-side persistence per
+conversation, EU inference, live agency coverage and a real send behind a signed approval. Hosting
+the app would first need authentication and rate limiting.
