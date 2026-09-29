@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { Streamdown } from "streamdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +15,27 @@ type Props = {
 const ROW_CLASS =
   "flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-input p-3 leading-normal font-normal transition-colors hover:bg-muted has-data-checked:border-secondary has-data-checked:bg-accent";
 
-export function ChoiceCard({ part, onAnswer }: Props) {
+// The agent's answer that precedes the question, written as its own prose.
+function Intro({ text }: { text?: string }) {
+  if (!text) return null;
+  return (
+    <div className="max-w-[65ch]">
+      <Streamdown disallowedElements={["img"]}>{text}</Streamdown>
+    </div>
+  );
+}
+
+export function ChoiceCard(props: Props) {
+  const intro = props.part.input?.intro;
+  return (
+    <div className="flex flex-col gap-3">
+      <Intro text={intro} />
+      <Choice {...props} />
+    </div>
+  );
+}
+
+function Choice({ part, onAnswer }: Props) {
   const id = useId();
   const [selected, setSelected] = useState<string[]>([]);
   if (part.state === "input-streaming" || !part.input) return null;

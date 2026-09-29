@@ -91,6 +91,10 @@ describe.skipIf(!hasKeys)("live scenarios", () => {
       .toBeUndefined();
     const photos = photoQueries(messages).length + cards(messages).filter((c) => c.photo).length;
     expect.soft(photos, "something shows what it looks like").toBeGreaterThan(0);
+    // The question was « c'est où ? »: the traveller has to read the answer, not only see photos.
+    expect
+      .soft(assistantTexts(messages).join(" "), "the traveller reads where it is")
+      .toMatch(/Tanzanie|océan Indien|Afrique de l’Est|Afrique de l'Est/);
   });
 
   it("a family with everything mandatory is still asked its budget", async () => {
