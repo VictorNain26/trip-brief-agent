@@ -4,6 +4,7 @@ import {
   deriveConversationState,
   LIMITS,
   prepareModelMessages,
+  TYPED_REPLY_REASON,
 } from "@/lib/agent/conversation";
 import { createState } from "@/lib/agent/state";
 import { buildDestinationCard, createTools } from "@/lib/agent/tools";
@@ -246,6 +247,40 @@ describe("deriveConversationState", () => {
 });
 
 describe("prepareModelMessages", () => {
+  const pendingRecap = {
+    type: "tool-propose_quote_request",
+    toolCallId: "q1",
+    state: "approval-requested",
+    input: { briefVersion: "aaaaaaaaaaaaaaaa" },
+    approval: { id: "a1" },
+  } as unknown as ChatUIMessage["parts"][number];
+
+  // Fails if the typed-reply resolution reaches the last message: the recap the traveller can
+  // still click would be refused behind their back.
+  it("leaves a recap in the last message awaiting the traveller", async () => {
+    const serialized = JSON.stringify(
+      await prepareModelMessages(
+        [user("1", "Vietnam"), assistant("2", [pendingRecap])],
+        tools,
+        today,
+      ),
+    );
+    expect(serialized).toContain("tool-approval-request");
+    expect(serialized).not.toContain(TYPED_REPLY_REASON);
+  });
+
+  it("resolves a recap the traveller wrote past as refused, with the reason", async () => {
+    const serialized = JSON.stringify(
+      await prepareModelMessages(
+        [user("1", "Vietnam"), assistant("2", [pendingRecap]), user("3", "Plutôt en mars")],
+        tools,
+        today,
+      ),
+    );
+    expect(serialized).toContain("execution-denied");
+    expect(serialized).toContain(TYPED_REPLY_REASON);
+  });
+
   it("replaces client-sent guide content with the file content", async () => {
     const messages = [
       user("1", "En famille"),

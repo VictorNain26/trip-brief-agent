@@ -7,7 +7,12 @@ import { RecapCard } from "@/components/chat/recap-card";
 import { SentBrief } from "@/components/chat/sent-brief";
 import { SourcesDisclosure } from "@/components/chat/sources-list";
 import type { ChatUIMessage } from "@/lib/agent/types";
-import { briefForVersion, newFeasibilityAlerts, searchDisplay } from "@/lib/chat/client-state";
+import {
+  briefForVersion,
+  newFeasibilityAlerts,
+  pendingApproval,
+  searchDisplay,
+} from "@/lib/chat/client-state";
 
 type Props = {
   message: ChatUIMessage;
@@ -98,11 +103,16 @@ export function MessageView({
               </p>
             );
           }
+          const answerable = pendingApproval(messages)?.toolCallId === part.toolCallId;
           return (
             <RecapCard
               key={key}
               brief={brief}
-              onRespond={(approved, reason) => onApproval(part.approval.id, approved, reason)}
+              onRespond={
+                answerable
+                  ? (approved, reason) => onApproval(part.approval.id, approved, reason)
+                  : undefined
+              }
             />
           );
         }

@@ -54,6 +54,22 @@ export function pendingQuestions(messages: ChatUIMessage[]): PendingQuestion[] {
   );
 }
 
+export type PendingApproval = Extract<
+  ToolPart<"propose_quote_request">,
+  { state: "approval-requested" }
+>;
+
+// Only the last message's recap can still be answered: once the traveller writes past a recap, the
+// server resolves it as refused (lib/agent/conversation.ts) and its buttons would answer nothing.
+export function pendingApproval(messages: ChatUIMessage[]): PendingApproval | undefined {
+  const last = messages.at(-1);
+  if (!last || last.role !== "assistant") return undefined;
+  return last.parts.find(
+    (part): part is PendingApproval =>
+      part.type === "tool-propose_quote_request" && part.state === "approval-requested",
+  );
+}
+
 export function answerPendingQuestions(
   messages: ChatUIMessage[],
   answer: Answer,
@@ -165,12 +181,8 @@ export function statusLabel(
     const pending = pendingQuestions(messages)[0];
     if (pending)
       return { text: `Une question vous attend : ${pending.input.question}`, visible: false };
-    const last = messages.at(-1);
-    if (last?.role !== "assistant") return undefined;
-    const awaitingApproval = last.parts.some(
-      (part) => part.type === "tool-propose_quote_request" && part.state === "approval-requested",
-    );
-    if (awaitingApproval)
+    if (messages.at(-1)?.role !== "assistant") return undefined;
+    if (pendingApproval(messages))
       return { text: "Votre récapitulatif est prêt à vérifier avant envoi.", visible: false };
     return { text: "Réponse reçue.", visible: false };
   }
@@ -210,10 +222,11 @@ export function missingForRecap(messages: ChatUIMessage[]): MissingItem[] {
 export function canRequestRecap(messages: ChatUIMessage[]): boolean {
   const outputs = briefOutputs(messages);
   if (outputs.length === 0 || (outputs.at(-1)?.missingForRecap.length ?? 1) > 0) return false;
+  if (pendingApproval(messages)) return false;
   return !parts(messages).some(
     (part) =>
       part.type === "tool-propose_quote_request" &&
-      (part.state === "approval-requested" ||
-        (part.state === "output-available" && part.output.ok)),
+      part.state === "output-available" &&
+      part.output.ok,
   );
 }

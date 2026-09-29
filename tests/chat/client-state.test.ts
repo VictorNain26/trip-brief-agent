@@ -343,6 +343,17 @@ describe("canRequestRecap", () => {
     expect(canRequestRecap(sent)).toBe(false);
   });
 
+  // Fails if the pending check scans the whole history: a recap the traveller wrote past would keep
+  // "Voir le récapitulatif" hidden for the rest of the conversation.
+  it("opens again once the traveller has written past a recap", () => {
+    const writtenPast = [
+      assistant("2", [briefPart([]), proposal("approval-requested")]),
+      user("3", "Finalement deux semaines"),
+      assistant("4", [briefPart([])]),
+    ];
+    expect(canRequestRecap(writtenPast)).toBe(true);
+  });
+
   it("stays open after a refused send, so the traveller can ask again", () => {
     const refused = [assistant("2", [briefPart([]), proposal("output-available", false)])];
     expect(canRequestRecap(refused)).toBe(true);
