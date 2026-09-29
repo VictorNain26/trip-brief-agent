@@ -1,16 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { loadGuide } from "@/lib/agent/guides";
+import { loadFamilyGuide } from "@/lib/agent/guides";
 import { SYSTEM_PROMPT } from "@/lib/agent/system-prompt";
 
 describe("SYSTEM_PROMPT", () => {
-  it("contains no guide content", async () => {
-    for (const name of ["family_travel", "responsible_travel"] as const) {
-      const lines = (await loadGuide(name))
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 25);
-      for (const line of lines) expect(SYSTEM_PROMPT).not.toContain(line);
-    }
+  // Fails if the family guide is pasted into the prompt: it would reach every conversation, with
+  // or without children, instead of arriving with the brief update that records them.
+  it("contains no family guide content", async () => {
+    const lines = (await loadFamilyGuide())
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 25);
+    for (const line of lines) expect(SYSTEM_PROMPT).not.toContain(line);
+  });
+
+  // Fails if the responsible-travel principles leave the prompt: every recommendation relies on
+  // them, and the card's travelBetter field is where they show.
+  it("carries the responsible-travel principles for every recommendation", () => {
+    const section = SYSTEM_PROMPT.split("# Voyager mieux")[1]?.split("\n# ")[0] ?? "";
+    expect(section).toMatch(/période moins fréquentée/);
+    expect(section).toMatch(/séjour plus long/);
+    expect(section).toMatch(/animaux à distance/);
   });
 
   it("tells the model the propose_quote_request text must not ask for confirmation or repeat the card's buttons", () => {
@@ -37,18 +46,6 @@ describe("SYSTEM_PROMPT", () => {
     expect(ecriture).toMatch(/«\s*Brief\s*».*jamais.*voyageur/);
     expect(ecriture).toContain("votre voyage");
     expect(ecriture).toContain("votre demande");
-  });
-
-  // The family guide is no longer forced by a step setting: loading it is the model's decision, so
-  // the rule has to say when — in the turn the family appears, before anything is recommended.
-  it("tells the model to load family_travel in the turn the family is mentioned", () => {
-    const guides = SYSTEM_PROMPT.split("# Guides")[1]?.split("\n# ")[0] ?? "";
-    const [rule] = guides
-      .split("\n")
-      .filter((line) => line.includes('load_guide("family_travel")'));
-    expect(rule).toMatch(/dans le tour même/);
-    expect(rule).toMatch(/juste après update_trip_brief/);
-    expect(rule).toMatch(/avant toute recherche, fiche ou récapitulatif/);
   });
 
   // The model skipped update_trip_brief for whole conversations while the rule mandating it sat
@@ -120,7 +117,6 @@ describe("SYSTEM_PROMPT", () => {
       "ask_traveler",
       "search_web",
       "show_destination_card",
-      "load_guide",
       "update_trip_brief",
       "propose_quote_request",
       "modifier",

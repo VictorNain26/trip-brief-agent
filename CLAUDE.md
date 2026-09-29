@@ -17,7 +17,9 @@ for a local agency. Scope, design and backlog: `docs/architecture.md`; decisions
 - Never set `temperature`/`topP`/`topK` on `claude-sonnet-5-5`: the API rejects them.
 - The chat route is stateless and the client is untrusted: rebuild state from
   `update_trip_brief` inputs, never from client-sent tool outputs.
-- Guides (`guides/*/SKILL.md`) reach the model only through `load_guide`, never the system prompt.
+- The family guide (`guides/family_travel/SKILL.md`) reaches the model only through the
+  `update_trip_brief` result that first records children; responsible-travel principles live in the
+  system prompt. Make the model apply guidance through tool contracts (card fields), not more rules.
 - Tools return `{ ok: false, error }` for expected failures instead of throwing.
 - Prefer a maintained library over custom code, and cite its docs in the commit. Already chosen:
   shadcn/ui (Radix) for interactive primitives, Streamdown for markdown, zod for every schema,

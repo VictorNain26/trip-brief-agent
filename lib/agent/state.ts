@@ -1,5 +1,5 @@
 import { toolFailure, type ToolError } from "@/lib/agent/errors";
-import type { GuideName } from "@/lib/agent/guides";
+import { loadFamilyGuide } from "@/lib/agent/guides";
 import type { SearchOutcome, SearchTopic } from "@/lib/agent/search";
 import { MISSING_LABELS } from "@/lib/brief/labels";
 import { confirmMandatoryFields, mergeBrief } from "@/lib/brief/merge";
@@ -14,13 +14,14 @@ export type UpdateTripBriefOutput =
       brief: TripBrief;
       version: string;
       missingForRecap: MissingItem[];
-      requiredGuide?: "family_travel";
+      familyGuidance?: string;
     }
   | { ok: false; error: ToolError };
 
 export type ConversationState = {
   brief: TripBrief;
-  loadedGuides: Set<GuideName>;
+  /** Set once the family guidance has been handed to the model, so it is handed over only once. */
+  familyGuidanceGiven: boolean;
   searchUrls: Set<string>;
   healthSearches: Set<string>;
 };
@@ -28,14 +29,10 @@ export type ConversationState = {
 export function createState(): ConversationState {
   return {
     brief: EMPTY_BRIEF,
-    loadedGuides: new Set(),
+    familyGuidanceGiven: false,
     searchUrls: new Set(),
     healthSearches: new Set(),
   };
-}
-
-export function familyGuideMissing(state: ConversationState): boolean {
-  return hasFamilySignals(state.brief) && !state.loadedGuides.has("family_travel");
 }
 
 // Padded with spaces so that a name only matches as whole words: « Oman » is inside « romantique ».
@@ -78,7 +75,6 @@ export function sendDenial(
   if (missing.length > 0) {
     return `Brief incomplet, il manque : ${missing.map((m) => MISSING_LABELS[m]).join(", ")}.`;
   }
-  if (familyGuideMissing(state)) return "Chargez d'abord le guide family_travel.";
   if (!isReadyToSend(state.brief, today, approvedVersion)) {
     return `Version périmée, la version actuelle est ${briefVersion(state.brief)}.`;
   }
@@ -90,28 +86,45 @@ export function invalidSources(state: ConversationState, urls: string[]): string
 }
 
 // One writer for the brief, shared by the live tool and by the replay of a client-sent history,
-// so the two can never drift into computing a different brief from the same patch.
+// so the two can never drift into computing a different brief from the same patch. It also says
+// whether this patch is the first to record children, the moment the family guidance is due.
 export function applyPatch(
   state: ConversationState,
   today: Date,
   patch: TripBriefPatch,
-): UpdateTripBriefOutput {
+): { output: UpdateTripBriefOutput; familyGuidanceDue: boolean } {
   const alertSources = (patch.feasibilityAlerts ?? []).flatMap((alert) => alert.sources);
   const invalid = invalidSources(state, alertSources);
   if (invalid.length > 0) {
-    return toolFailure(
+    const output = toolFailure(
       "validation",
       `Sources d'alerte invalides (doivent provenir de search_web) : ${invalid.join(", ")}.`,
     );
+    return { output, familyGuidanceDue: false };
   }
   state.brief = mergeBrief(state.brief, patch);
-  return {
-    ok: true,
+  const familyGuidanceDue = !state.familyGuidanceGiven && hasFamilySignals(state.brief);
+  if (familyGuidanceDue) state.familyGuidanceGiven = true;
+  const output = {
+    ok: true as const,
     brief: state.brief,
     version: briefVersion(state.brief),
     missingForRecap: missingForRecap(state.brief, today),
-    ...(familyGuideMissing(state) ? { requiredGuide: "family_travel" as const } : {}),
   };
+  return { output, familyGuidanceDue };
+}
+
+// The family guidance rides on the brief update that first records children: that is when the
+// agent needs it, and one copy per conversation keeps a history that adds and removes children
+// from multiplying the file in the model's context.
+export async function recordPatch(
+  state: ConversationState,
+  today: Date,
+  patch: TripBriefPatch,
+): Promise<UpdateTripBriefOutput> {
+  const { output, familyGuidanceDue } = applyPatch(state, today, patch);
+  if (!output.ok || !familyGuidanceDue) return output;
+  return { ...output, familyGuidance: await loadFamilyGuide() };
 }
 
 // Approving the recap confirms what the agency will read. The promotion has to be applied here

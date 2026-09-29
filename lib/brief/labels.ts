@@ -142,11 +142,6 @@ export function formatTrackedValue(field: TrackedFieldName, value: TrackedFieldV
   return format ? format(value) : String(value);
 }
 
-export const GUIDE_LABELS = {
-  family_travel: "Conseils famille",
-  responsible_travel: "Conseils voyage responsable",
-} as const;
-
 export const LIST_FIELD_LABELS = {
   interests: "Envies et style de voyage",
   constraints: "Contraintes",

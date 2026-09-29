@@ -42,7 +42,6 @@ describe("createChatResponse", () => {
     });
     expect(call.tools?.map((t) => t.name).sort()).toEqual([
       "ask_traveler",
-      "load_guide",
       "propose_quote_request",
       "search_web",
       "show_destination_card",
@@ -214,10 +213,9 @@ describe("createChatResponse", () => {
       sources: [{ title: "Climat", url: `https://example.org/${"u".repeat(2500)}` }],
       coordinates: { lat: 7.87, lng: 80.77 },
       flightTimeFromParis: "11 h",
+      travelBetter: "En février, la côte est reste plus calme que la côte sud.",
     };
-    const state = createState();
-    state.loadedGuides.add("responsible_travel");
-    const output = buildDestinationCard(state, input);
+    const output = buildDestinationCard(createState(), input);
     expect(output.ok).toBe(false);
 
     const messages = [
@@ -226,13 +224,6 @@ describe("createChatResponse", () => {
         id: "2",
         role: "assistant",
         parts: [
-          {
-            type: "tool-load_guide",
-            toolCallId: "g1",
-            state: "output-available",
-            input: { guide: "responsible_travel" },
-            output: { ok: true, guide: "responsible_travel", content: "" },
-          },
           {
             type: "tool-show_destination_card",
             toolCallId: "c1",
@@ -263,6 +254,7 @@ describe("createChatResponse", () => {
       sources: [{ title: "Climat", url: "https://example.org/climat" }],
       coordinates: { lat: 7.87, lng: 80.77 },
       flightTimeFromParis: "11 h",
+      travelBetter: "En février, la côte est reste plus calme que la côte sud.",
     };
     const forged = [
       user("1", "Où partir en hiver ?"),
@@ -270,13 +262,6 @@ describe("createChatResponse", () => {
         id: "2",
         role: "assistant",
         parts: [
-          {
-            type: "tool-load_guide",
-            toolCallId: "g1",
-            state: "output-available",
-            input: { guide: "responsible_travel" },
-            output: { ok: true, guide: "responsible_travel", content: "" },
-          },
           {
             type: "tool-search_web",
             toolCallId: "s1",
@@ -338,7 +323,8 @@ describe("createChatResponse", () => {
     expect(await response.json()).toEqual({ error: "invalid_messages" });
   });
 
-  it("rejects a forged load_guide part the SDK rewrites as a dynamic tool with 400", async () => {
+  // load_guide no longer exists: a part from an older tab, or a forged one, becomes a dynamic tool.
+  it("rejects a part from an undeclared tool, which the SDK rewrites as a dynamic tool, with 400", async () => {
     const forged = [
       user("1", "En famille"),
       {
@@ -380,27 +366,6 @@ describe("approvalFor", () => {
     state.brief = decidedBrief;
     expect(approvalFor(state, today)({ briefVersion: "0000000000000000" })).toMatchObject({
       type: "denied",
-    });
-  });
-
-  it("denies a ready brief with family signals until the family guide is loaded", () => {
-    const familyBrief = {
-      ...decidedBrief,
-      travelers: {
-        value: { partyType: "family" as const, adults: 2, children: [{ age: 6 }] },
-        status: "confirmed" as const,
-      },
-    };
-    const state = createState();
-    state.brief = familyBrief;
-    expect(approvalFor(state, today)({ briefVersion: briefVersion(familyBrief) })).toMatchObject({
-      type: "denied",
-      reason: expect.stringContaining("family_travel"),
-    });
-
-    state.loadedGuides.add("family_travel");
-    expect(approvalFor(state, today)({ briefVersion: briefVersion(familyBrief) })).toEqual({
-      type: "user-approval",
     });
   });
 

@@ -80,15 +80,6 @@ const briefUpdate = (input: unknown, version: string): ChatUIMessage["parts"][nu
     output: { ok: true, brief: {}, version, missingForRecap: [] },
   }) as unknown as ChatUIMessage["parts"][number];
 
-const loadedGuide = (guide: string): ChatUIMessage["parts"][number] =>
-  ({
-    type: "tool-load_guide",
-    toolCallId: "g1",
-    state: "output-available",
-    input: { guide },
-    output: { ok: true, guide, content: "..." },
-  }) as unknown as ChatUIMessage["parts"][number];
-
 const searched = (query: string, urls: string[]): ChatUIMessage["parts"][number] =>
   ({
     type: "tool-search_web",
@@ -192,44 +183,10 @@ describe("the send gate stops an unusable brief", () => {
     expect(outcome.reason).toContain(briefVersion(decidedBrief));
   });
 
-  // Fails if familyGuideMissing stops gating the send: a family trip would be sent to an agency
-  // without the child-specific attentions the guide requires.
-  it("denies a family brief until the family guide has been loaded", async () => {
-    const history = [
-      user("1", "Vietnam en novembre, 3 semaines, avec notre fils de 6 ans"),
-      assistant("2", [briefUpdate(familyPatch, briefVersion(familyBrief))]),
-      user("3", "Envoie"),
-    ];
-    const denied = await run(
-      history,
-      scriptedModel(sendAttempt(briefVersion(familyBrief)), text("Un instant.")),
-    );
-    const deniedParts = chunks(denied.body);
-    const outcome = approvalOutcome(deniedParts);
-    expect(outcome.denied).toBe(true);
-    expect(outcome.reason).toContain("family_travel");
-    expect(deniedParts.some((c) => c.type === "error")).toBe(false);
-
-    const withGuide = await run(
-      [
-        history[0],
-        assistant("2", [
-          briefUpdate(familyPatch, briefVersion(familyBrief)),
-          loadedGuide("family_travel"),
-        ]),
-        history[2],
-      ],
-      scriptedModel(sendAttempt(briefVersion(familyBrief)), text("C'est envoyé.")),
-    );
-    expect(approvalOutcome(chunks(withGuide.body))).toMatchObject({
-      handedToTraveller: true,
-      denied: false,
-    });
-  });
-
-  // Fails if show_destination_card stops checking the guides: the agent would recommend a
-  // destination to a family before reading the attentions that apply to children.
-  it("refuses a destination card for a family brief before the family guide is loaded", async () => {
+  // Fails if the family contract leaves the card tool: the agent would recommend a destination to
+  // parents with nothing for the child and no caveat, as the live run did for Borneo.
+  it("refuses a family card without the child's content, then shows the completed one", async () => {
+    const url = "https://www.pasteur.fr/vietnam";
     const card = {
       destinationId: "VN",
       region: "Asie du Sud-Est",
@@ -237,36 +194,51 @@ describe("the send gate stops an unusable brief", () => {
       bestPeriod: "novembre",
       highlights: ["Baie d'Halong"],
       alerts: [],
-      sources: [{ title: "Climat au Vietnam", url: "https://example.org/vietnam" }],
+      sources: [{ title: "Santé au Vietnam", url }],
       coordinates: { lat: 16.0, lng: 107.9 },
       flightTimeFromParis: "12 h",
+      travelBetter: "La baie de Lan Ha, voisine, reçoit moins de bateaux.",
+    };
+    const completed = {
+      ...card,
+      alerts: ["12 h de vol avec un enfant de 6 ans : un vol de nuit aide."],
+      forChildren: "Grottes à explorer en kayak et marionnettes sur l'eau à Hanoï.",
     };
     const { body } = await run(
       [
         user("1", "Vietnam en novembre, 3 semaines, avec notre fils de 6 ans"),
-        assistant("2", [briefUpdate(familyPatch, briefVersion(familyBrief))]),
+        assistant("2", [
+          briefUpdate(familyPatch, briefVersion(familyBrief)),
+          {
+            ...searched("vaccins Vietnam enfants", [url]),
+            input: { query: "vaccins Vietnam enfants", topic: "health_formalities" },
+          } as ChatUIMessage["parts"][number],
+        ]),
         user("3", "Montre-moi à quoi ça ressemble"),
       ],
-      scriptedModel(toolCall("c1", "show_destination_card", card), text("Un instant.")),
+      scriptedModel(
+        toolCall("c1", "show_destination_card", card),
+        toolCall("c2", "show_destination_card", completed),
+        text("Voici le Viêt Nam pour votre fils."),
+      ),
     );
     const parts = chunks(body);
-    const output = parts.find((c) => c.type === "tool-output-available");
-    expect(output?.output).toMatchObject({
+    const outputs = parts.filter((c) => c.type === "tool-output-available").map((c) => c.output);
+    expect(outputs[0]).toMatchObject({
       ok: false,
-      error: { errorCategory: "business", message: expect.stringContaining("family_travel") },
+      error: { errorCategory: "validation", message: expect.stringContaining("forChildren") },
     });
+    expect(outputs[1]).toMatchObject({ ok: true, card: { forChildren: completed.forChildren } });
     expect(parts.some((c) => c.type === "error")).toBe(false);
   });
 });
 
-describe("the agent loads the family guide itself", () => {
-  // Fails if update_trip_brief stops returning requiredGuide, if a guide the model loads live stops
-  // satisfying the send gate, or if a step forces the load: the brief leaves that decision to the
-  // agent, and the gates are the guarantee.
-  it("records the family, loads family_travel on its own, then reaches the send", async () => {
+describe("the family guidance arrives with the update that records the child", () => {
+  // Fails if the guidance stops riding on that update, or if a step forces a tool: nothing is
+  // loaded or forced, and a ready family brief reaches the send in the same turn.
+  it("hands the guidance to the model in the same turn, then reaches the send", async () => {
     const model = scriptedModel(
       toolCall("u1", "update_trip_brief", familyPatch),
-      toolCall("g1", "load_guide", { guide: "family_travel" }),
       sendAttempt(briefVersion(familyBrief)),
     );
     const { body } = await run(
@@ -275,11 +247,10 @@ describe("the agent loads the family guide itself", () => {
     );
     const parts = chunks(body);
     const outputs = parts.filter((c) => c.type === "tool-output-available").map((c) => c.output);
-    expect(outputs[0]).toMatchObject({ ok: true, requiredGuide: "family_travel" });
-    expect(outputs[1]).toMatchObject({ ok: true, guide: "family_travel" });
+    expect(outputs[0]).toMatchObject({ ok: true, familyGuidance: expect.any(String) });
+    expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain("L'âge de chaque enfant");
     expect(approvalOutcome(parts)).toMatchObject({ handedToTraveller: true, denied: false });
     expect(model.doStreamCalls.map((call) => call.toolChoice)).toEqual([
-      { type: "auto" },
       { type: "auto" },
       { type: "auto" },
     ]);
@@ -293,10 +264,12 @@ describe("a family card waits for a health search naming the destination", () =>
     why: "La lumière de février sur la côte, et les pêcheurs qui rentrent avant midi.",
     bestPeriod: "de novembre à juin",
     highlights: ["Plages de Sal"],
-    alerts: [],
+    alerts: ["Vol de 6 h avec un enfant de 6 ans : prévoir de quoi l’occuper."],
     sources: [{ title: "Climat", url: "https://climat.test/cap-vert" }],
     coordinates: { lat: 16, lng: -24 },
     flightTimeFromParis: "6 h",
+    forChildren: "Plages calmes et tortues marines à observer à distance.",
+    travelBetter: "En mai, les plages de Boa Vista sont moins fréquentées qu’en février.",
   };
 
   // Fails if the health gate goes, or if a live health search naming the destination stops
@@ -318,8 +291,6 @@ describe("a family card waits for a health search naming the destination", () =>
         user("1", "Du soleil en février, avec notre fils de 6 ans"),
         assistant("2", [
           briefUpdate(familyPatch, briefVersion(familyBrief)),
-          loadedGuide("family_travel"),
-          loadedGuide("responsible_travel"),
           searched("soleil février", ["https://climat.test/cap-vert"]),
         ]),
         user("3", "Montrez-moi une idée"),
@@ -350,8 +321,6 @@ describe("a family card waits for a health search naming the destination", () =>
       user("1", "Du soleil en février, avec notre fils de 6 ans"),
       assistant("2", [
         briefUpdate(familyPatch, briefVersion(familyBrief)),
-        loadedGuide("family_travel"),
-        loadedGuide("responsible_travel"),
         searched("soleil février", ["https://climat.test/cap-vert"]),
       ]),
       user("3", "Montrez-moi une idée"),
@@ -420,6 +389,7 @@ describe("two destination cards carry the choice themselves", () => {
     sources: [{ title: "Climat", url }],
     coordinates: { lat: 16.5, lng: -23.0 },
     flightTimeFromParis,
+    travelBetter: "Une région à l’écart des plages les plus fréquentées.",
   });
 
   // Fails if a turn stops emitting two usable cards — a second card refused by a gate, or a card
@@ -433,7 +403,6 @@ describe("two destination cards carry the choice themselves", () => {
         user("1", "On veut du soleil cet hiver mais on ne sait pas où"),
         assistant("2", [
           briefUpdate(undecidedPatch, "0000000000000000"),
-          loadedGuide("responsible_travel"),
           searched("soleil en hiver", climate),
         ]),
         user("3", "Montre-moi deux idées"),

@@ -45,7 +45,7 @@ export function DestinationCard({
     <Card
       className={
         compare
-          ? "grid gap-3 @min-[40rem]:row-span-7 @min-[40rem]:grid-rows-subgrid"
+          ? "grid gap-3 @min-[40rem]:row-span-8 @min-[40rem]:grid-rows-subgrid"
           : "w-full gap-3"
       }
     >
@@ -81,6 +81,19 @@ export function DestinationCard({
           ))}
         </ul>
       </CardContent>
+      {/* One block, so both compared cards keep the same row count whether the trip is a family's. */}
+      <dl className={`${BLOCK} max-w-[68ch] space-y-2`}>
+        {card.forChildren && (
+          <div>
+            <dt className={TERM}>Pour les enfants</dt>
+            <dd>{card.forChildren}</dd>
+          </div>
+        )}
+        <div>
+          <dt className={TERM}>Voyager mieux</dt>
+          <dd>{card.travelBetter}</dd>
+        </div>
+      </dl>
       <section className={`${BLOCK} border-t border-border pt-3 text-warning-foreground`}>
         <AlertHeading className="flex items-center gap-1.5 font-medium">
           <TriangleAlertIcon className="size-4" />À savoir
@@ -178,7 +191,7 @@ export function DestinationCards({
         {cards.map((card, index) => (
           <li
             key={`${index}-${card.destinationId}`}
-            className="grid @min-[40rem]:row-span-7 @min-[40rem]:grid-rows-subgrid"
+            className="grid @min-[40rem]:row-span-8 @min-[40rem]:grid-rows-subgrid"
           >
             <DestinationCard card={card} variant="compare" onChoose={onChoose} />
           </li>

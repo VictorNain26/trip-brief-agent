@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolExecuteFunction, ToolExecutionOptions } from "ai";
 import { toolFailure } from "@/lib/agent/errors";
 import { createState, type ConversationState } from "@/lib/agent/state";
-import { createTools, destinationCardInputSchema, loadGuideInputSchema } from "@/lib/agent/tools";
+import { createTools, destinationCardInputSchema } from "@/lib/agent/tools";
 import { searchOutcomeSchema, type SearchFn } from "@/lib/agent/search";
 import { tripBriefPatchSchema } from "@/lib/brief/schema";
 import { briefVersion } from "@/lib/brief/version";
@@ -60,6 +60,15 @@ const card = {
   sources: [{ title: "Climat", url: "https://example.org/climat" }],
   coordinates: { lat: 7.87, lng: 80.77 },
   flightTimeFromParis: "11 h",
+  travelBetter: "En février, la côte est reste plus calme que la côte sud.",
+};
+
+const familyBriefWithChild = {
+  ...decidedBrief,
+  travelers: {
+    value: { partyType: "family" as const, adults: 2, children: [{ age: 6 }] },
+    status: "confirmed" as const,
+  },
 };
 
 describe("tools", () => {
@@ -87,79 +96,85 @@ describe("tools", () => {
     expect(state.searchUrls.size).toBe(0);
   });
 
-  it("load_guide marks the guide as loaded and returns its body", async () => {
+  // Fails if the guidance stops riding on the update that first records children, or comes back
+  // on every later update: the model would lack it when it matters, or carry one copy per update.
+  it("update_trip_brief hands the family guidance over once, when children are first recorded", async () => {
     const { tools, state } = setup();
-    const output = await run(tools.load_guide, { guide: "family_travel" });
-    if (!output.ok) throw new Error("expected load_guide to succeed");
-    expect(output.content).toContain("L'âge de chaque enfant");
-    expect(state.loadedGuides.has("family_travel")).toBe(true);
-  });
-
-  it("load_guide's input schema rejects an out-of-list name so the filesystem is never read", () => {
-    const { tools } = setup();
-    // Same object the tool actually validates against, not a look-alike duplicate.
-    expect(tools.load_guide.inputSchema).toBe(loadGuideInputSchema);
-    const rejected = loadGuideInputSchema.safeParse({ guide: "../../etc/passwd" });
-    expect(rejected.success).toBe(false);
-    expect(readFileMock).not.toHaveBeenCalled();
-  });
-
-  it("load_guide's input schema accepts a listed guide, which then does reach the filesystem", async () => {
-    const { tools } = setup();
-    const accepted = loadGuideInputSchema.safeParse({ guide: "family_travel" });
-    expect(accepted.success).toBe(true);
-    if (!accepted.success) throw new Error("expected validation to succeed");
-    await run(tools.load_guide, accepted.data);
-    expect(readFileMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("update_trip_brief merges and asks for the family guide when children appear", async () => {
-    const { tools, state } = setup();
-    const output = await run(tools.update_trip_brief, {
+    const first = await run(tools.update_trip_brief, {
       travelers: {
         value: { partyType: "family", adults: 2, children: [{ age: 4 }] },
         status: "confirmed",
       },
     });
-    if (!output.ok) throw new Error("expected update_trip_brief to succeed");
+    if (!first.ok) throw new Error("expected update_trip_brief to succeed");
     expect(state.brief.travelers?.value.children).toEqual([{ age: 4 }]);
-    expect(output.requiredGuide).toBe("family_travel");
-    expect(output.missingForRecap).toEqual(["destination", "dates", "duration", "budget"]);
-    expect(output.version).toBe(briefVersion(state.brief));
-  });
+    expect(first.familyGuidance).toContain("L'âge de chaque enfant");
+    expect(first.missingForRecap).toEqual(["destination", "dates", "duration", "budget"]);
+    expect(first.version).toBe(briefVersion(state.brief));
 
-  it("show_destination_card requires the responsible travel guide", async () => {
-    const { tools, state } = setup();
-    state.searchUrls.add("https://example.org/climat");
-    const output = await run(tools.show_destination_card, card);
-    expect(output).toMatchObject({ ok: false, error: { errorCategory: "business" } });
-  });
-
-  it("show_destination_card requires the family guide when family signals exist", async () => {
-    const state = createState();
-    state.brief = {
-      ...decidedBrief,
-      travelers: { value: { partyType: "family", adults: 2, children: [] }, status: "confirmed" },
-    };
-    state.loadedGuides.add("responsible_travel");
-    state.searchUrls.add("https://example.org/climat");
-    const output = await run(setup(state).tools.show_destination_card, card);
-    expect(output).toMatchObject({
-      ok: false,
-      error: { message: expect.stringContaining("family_travel") },
+    const second = await run(tools.update_trip_brief, {
+      destination: { value: { destinationId: "PT" }, status: "confirmed" },
     });
+    if (!second.ok) throw new Error("expected update_trip_brief to succeed");
+    expect(second.familyGuidance).toBeUndefined();
+    expect(readFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("update_trip_brief gives no family guidance to a couple", async () => {
+    const { tools } = setup();
+    const output = await run(tools.update_trip_brief, {
+      travelers: { value: { partyType: "couple", adults: 2, children: [] }, status: "confirmed" },
+    });
+    if (!output.ok) throw new Error("expected update_trip_brief to succeed");
+    expect(output.familyGuidance).toBeUndefined();
+  });
+
+  // Fails if the family contract is dropped: the live run proposed Borneo to parents of an
+  // 8-year-old with no word for the child and no caveat about the flight.
+  it("show_destination_card refuses a family card without children content or a caveat", async () => {
+    const state = createState();
+    state.brief = familyBriefWithChild;
+    state.searchUrls.add("https://example.org/climat");
+    const { tools } = setup(state);
+    await run(tools.search_web, {
+      query: "vaccins Sri Lanka enfants",
+      topic: "health_formalities",
+    });
+    const noChildren = await run(tools.show_destination_card, {
+      ...card,
+      alerts: ["Vol de 11 h avec un enfant de 6 ans : prévoir une escale."],
+    });
+    expect(noChildren).toMatchObject({
+      ok: false,
+      error: { errorCategory: "validation", message: expect.stringContaining("forChildren") },
+    });
+    const noCaveat = await run(tools.show_destination_card, {
+      ...card,
+      forChildren: "Tortues marines et éléphants à observer de loin.",
+    });
+    expect(noCaveat).toMatchObject({ ok: false, error: { errorCategory: "validation" } });
+    const complete = await run(tools.show_destination_card, {
+      ...card,
+      alerts: ["Vol de 11 h avec un enfant de 6 ans : prévoir une escale."],
+      forChildren: "Tortues marines et éléphants à observer de loin.",
+    });
+    expect(complete).toMatchObject({ ok: true, card: { forChildren: expect.any(String) } });
+  });
+
+  it("show_destination_card requires a travelBetter suggestion on every card", () => {
+    const { travelBetter, ...withoutSuggestion } = card;
+    expect(travelBetter).toBeTruthy();
+    expect(destinationCardInputSchema.safeParse(withoutSuggestion).success).toBe(false);
   });
 
   it("show_destination_card rejects sources that no search returned", async () => {
-    const { tools, state } = setup();
-    state.loadedGuides.add("responsible_travel");
+    const { tools } = setup();
     const output = await run(tools.show_destination_card, card);
     expect(output).toMatchObject({ ok: false, error: { errorCategory: "validation" } });
   });
 
   it("show_destination_card returns the card with the catalogue label", async () => {
     const { tools, state } = setup();
-    state.loadedGuides.add("responsible_travel");
     state.searchUrls.add("https://example.org/climat");
     const output = await run(tools.show_destination_card, card);
     expect(output).toMatchObject({
@@ -175,19 +190,13 @@ describe("tools", () => {
       region: "Afrique de l’Ouest",
       coordinates: { lat: 16, lng: -24 },
       flightTimeFromParis: "6 h",
+      alerts: ["Vol de 6 h avec un enfant de 6 ans : prévoir de quoi l’occuper."],
+      forChildren: "Plages calmes et tortues marines à observer à distance.",
     };
 
     function familySetup() {
       const state = createState();
-      state.brief = {
-        ...decidedBrief,
-        travelers: {
-          value: { partyType: "family", adults: 2, children: [{ age: 6 }] },
-          status: "confirmed",
-        },
-      };
-      state.loadedGuides.add("family_travel");
-      state.loadedGuides.add("responsible_travel");
+      state.brief = familyBriefWithChild;
       state.searchUrls.add("https://example.org/climat");
       return setup(state);
     }
@@ -260,7 +269,6 @@ describe("tools", () => {
     it("leaves a card for a couple unaffected", async () => {
       const state = createState();
       state.brief = decidedBrief;
-      state.loadedGuides.add("responsible_travel");
       state.searchUrls.add("https://example.org/climat");
       const output = await run(setup(state).tools.show_destination_card, capVert);
       expect(output).toMatchObject({ ok: true, card: { destinationId: "CV" } });
@@ -269,7 +277,6 @@ describe("tools", () => {
 
   it("show_destination_card refuses a why over 280 characters or a fourth highlight", async () => {
     const state = createState();
-    state.loadedGuides.add("responsible_travel");
     state.searchUrls.add("https://climat.test/vietnam");
     const { tools } = setup(state);
     const card = {
@@ -282,6 +289,7 @@ describe("tools", () => {
       sources: [{ title: "Climat", url: "https://climat.test/vietnam" }],
       coordinates: { lat: 16, lng: 107.9 },
       flightTimeFromParis: "12 h",
+      travelBetter: "La baie de Lan Ha, voisine, reçoit moins de bateaux.",
     };
     expect(destinationCardInputSchema.safeParse({ ...card, why: "a".repeat(281) }).success).toBe(
       false,
@@ -293,7 +301,7 @@ describe("tools", () => {
     await expect(run(tools.show_destination_card, card)).resolves.toMatchObject({ ok: true });
   });
 
-  // Fails if either spine field goes optional again: the card renders its six blocks
+  // Fails if either spine field goes optional again: the card renders its blocks
   // unconditionally so that two cards of a turn share their row grid, and a missing row would
   // put every block below it one row apart from its counterpart.
   it("show_destination_card refuses a card whose comparison spine is incomplete", () => {
@@ -381,25 +389,11 @@ describe("tools", () => {
     expect(result).toMatchObject({ ok: true });
   });
 
-  it("propose_quote_request refuses a ready family brief until the family guide is loaded", async () => {
+  // Fails if a guide gate survives on the send: a ready family brief needs nothing loaded.
+  it("propose_quote_request sends a ready family brief", async () => {
     const state = createState();
-    state.brief = {
-      ...decidedBrief,
-      travelers: {
-        value: { partyType: "family", adults: 2, children: [{ age: 6 }] },
-        status: "confirmed",
-      },
-    };
+    state.brief = familyBriefWithChild;
     const { tools } = setup(state);
-    const denied = await run(tools.propose_quote_request, {
-      briefVersion: briefVersion(state.brief),
-    });
-    expect(denied).toMatchObject({
-      ok: false,
-      error: { errorCategory: "business", message: expect.stringContaining("family_travel") },
-    });
-
-    state.loadedGuides.add("family_travel");
     const sent = await run(tools.propose_quote_request, {
       briefVersion: briefVersion(state.brief),
     });
