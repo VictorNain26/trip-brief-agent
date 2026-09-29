@@ -107,17 +107,12 @@ describe("SYSTEM_PROMPT", () => {
     expect(straightQuoted.filter((q) => !/^[a-z][a-z0-9_]*$/.test(q))).toEqual([]);
   });
 
-  // After two cards the prompt forbids any question, and the conclusion used to allow only budget
-  // or wishes: with the four mandatory fields given early, the grouped family question the guide
-  // asks for never had a turn. The one question allowed at conclusion may now be that one.
-  it("lets the one question at conclusion be the family attention points, still only one", () => {
-    const conclure = SYSTEM_PROMPT.split("# Conclure")[1]?.split("\n# ")[0] ?? "";
-    const [rule] = conclure.split("\n").filter((line) => line.includes("missingForRecap"));
-    expect(rule).toMatch(/au plus une question/);
-    expect(rule).toMatch(/budget ou les envies/);
-    expect(rule).toMatch(/family_travel est chargé/);
-    expect(rule).toMatch(/rythme, hébergement, alimentation/);
-    expect(rule).toMatch(/Une seule question dans tous les cas/);
+  // The recap waits for a budget or for the traveller's choice to leave it to the agency. Fails if
+  // the prompt stops saying how to record that choice: the model would then invent an amount, or
+  // the recap would never unlock for a traveller who does not want to give one.
+  it("tells the model how to record a budget the traveller leaves to the agency", () => {
+    expect(SYSTEM_PROMPT).toMatch(/declined: true/);
+    expect(SYSTEM_PROMPT).toMatch(/ses mots en evidence/);
   });
 
   it("references every tool and the approval reasons", () => {

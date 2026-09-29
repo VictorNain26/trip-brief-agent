@@ -180,6 +180,37 @@ describe("mergeBrief", () => {
   });
 });
 
+describe("budget", () => {
+  const value = { currency: "EUR", basis: "perPersonExcludingInternationalFlights" } as const;
+
+  // Fails if a budget can be both declined and priced, or neither: the recap would unlock on a
+  // budget that says nothing, and the agency would read two contradicting answers.
+  it("is either an amount or declined, never both or neither", () => {
+    expect(() =>
+      patch({ budget: { value: { ...value, ideal: 2000 }, status: "confirmed" } }),
+    ).not.toThrow();
+    expect(() => patch({ budget: { value, status: "confirmed" } })).toThrow();
+    expect(() =>
+      patch({
+        budget: {
+          value: { ...value, ideal: 2000, declined: true },
+          status: "confirmed",
+          evidence: "x",
+        },
+      }),
+    ).toThrow();
+  });
+
+  // Fails if the model can decline on the traveller's behalf: a declined budget carries their words.
+  it("needs the traveller's words when declined", () => {
+    const declined = { ...value, declined: true };
+    expect(() => patch({ budget: { value: declined, status: "confirmed" } })).toThrow();
+    expect(() =>
+      patch({ budget: { value: declined, status: "confirmed", evidence: "on verra sur place" } }),
+    ).not.toThrow();
+  });
+});
+
 describe("confirmMandatoryFields", () => {
   it("promotes present mandatory fields to confirmed and leaves others untouched", () => {
     const brief = confirmMandatoryFields(decidedBrief);
@@ -187,7 +218,8 @@ describe("confirmMandatoryFields", () => {
     expect(brief.dates?.status).toBe("confirmed");
     expect(brief.duration?.status).toBe("confirmed");
     expect(brief.travelers?.status).toBe("confirmed");
-    expect(brief.budget?.status).toBe("inferred");
+    expect(brief.budget?.status).toBe("confirmed");
+    expect(brief.departureCountry?.status).toBe("inferred");
   });
 
   it("leaves absent mandatory fields absent", () => {

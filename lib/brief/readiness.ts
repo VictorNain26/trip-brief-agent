@@ -10,6 +10,7 @@ export type MissingItem =
   | "travelers"
   | "childrenAges"
   | "partySize"
+  | "budget"
   | "openContradiction";
 
 export const DAY_MS = 86_400_000;
@@ -58,6 +59,7 @@ export function missingForRecap(brief: TripBrief, today: Date): MissingItem[] {
     if (childrenUnknown) missing.push("childrenAges");
     if (travelers.uncertainty && !travelers.quoteBasis) missing.push("partySize");
   }
+  if (!brief.budget) missing.push("budget");
   if (brief.contradictions.some((c) => !c.resolved)) missing.push("openContradiction");
   return missing;
 }
@@ -83,6 +85,7 @@ const BLOCKS: Partial<Record<MissingItem, TrackedFieldName>> = {
   travelers: "travelers",
   childrenAges: "travelers",
   partySize: "travelers",
+  budget: "budget",
 };
 
 // Which mandatory fields a missing item holds up, so the panel can count what is actually done

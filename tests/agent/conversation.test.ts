@@ -167,7 +167,8 @@ describe("deriveConversationState", () => {
     const state = deriveConversationState(messages, today);
     expect(state.brief.destination?.status).toBe("confirmed");
     expect(state.brief.travelers?.status).toBe("confirmed");
-    expect(state.brief.budget?.status).toBe("inferred");
+    expect(state.brief.budget?.status).toBe("confirmed");
+    expect(state.brief.departureCountry?.status).toBe("inferred");
   });
 
   it("ignores a patch whose alert sources no search in the history returned", () => {

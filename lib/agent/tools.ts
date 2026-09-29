@@ -210,7 +210,7 @@ export function createTools({ state, search, today }: ToolDeps) {
         "status 'confirmed' si le voyageur l'a dit explicitement, 'inferred' si vous le déduisez ; evidence = ses mots.",
         "Dates : precision 'exact' (AAAA-MM-JJ), 'month' (AAAA-MM, plage possible avec end) ou 'season'.",
         "partyType 'family' signifie voyager avec des mineurs : renseignez chaque enfant avec son âge. Entre adultes, utilisez 'couple', 'friends' ou 'group'.",
-        "Budget : par personne, hors vols internationaux ; convertir un total et le marquer 'inferred'.",
+        "Budget : par personne, hors vols internationaux ; convertir un total et le marquer 'inferred'. Si le voyageur préfère en parler avec l'agence : declined: true, sans montant, avec ses mots en evidence.",
         "Une correction explicite du voyageur ('finalement', 'plutôt') : ajouter le champ dans resolves.",
         "null efface un champ ; une liste remplace la précédente.",
         "Les sources d’une alerte de faisabilité doivent être des URL renvoyées par search_web dans cette conversation.",

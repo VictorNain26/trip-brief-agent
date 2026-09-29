@@ -15,7 +15,7 @@ const LIST_FIELDS = [
   "feasibilityAlerts",
 ] as const;
 
-const MANDATORY_FIELDS = ["destination", "dates", "duration", "travelers"] as const;
+const MANDATORY_FIELDS = ["destination", "dates", "duration", "travelers", "budget"] as const;
 
 export function mergeBrief(brief: TripBrief, patch: TripBriefPatch): TripBrief {
   const next: Record<string, unknown> = structuredClone(brief);
