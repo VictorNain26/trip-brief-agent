@@ -1,7 +1,7 @@
 # Guides loaded on demand, with deterministic prerequisites
 
-Status: accepted; the UI chip named under Verifiability is superseded by
-[0007](0007-no-internals-in-the-interface.md)
+Status: superseded by [0009](0009-guidance-from-brief-state.md); the UI chip named under
+Verifiability was superseded earlier by [0007](0007-no-internals-in-the-interface.md)
 
 ## Context
 

@@ -1,20 +1,19 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { toolErrorSchema, toolFailure, type ToolError } from "@/lib/agent/errors";
-import { GUIDE_NAMES, loadGuide, type GuideName } from "@/lib/agent/guides";
+import { toolErrorSchema, toolFailure } from "@/lib/agent/errors";
 import { searchOutcomeSchema, type SearchFn } from "@/lib/agent/search";
 import {
-  applyPatch,
   applySend,
-  familyGuideMissing,
   healthSearchMissing,
   invalidSources,
+  recordPatch,
   recordSearch,
   sendDenial,
   type ConversationState,
   type UpdateTripBriefOutput,
 } from "@/lib/agent/state";
 import { renderAgencyText } from "@/lib/brief/agency-text";
+import { hasFamilySignals } from "@/lib/brief/readiness";
 import { destinationIdSchema, tripBriefPatchSchema, tripBriefSchema } from "@/lib/brief/schema";
 import { destinationLabel } from "@/lib/catalogue";
 
@@ -23,14 +22,6 @@ type ToolDeps = { state: ConversationState; search: SearchFn; today: Date };
 // `renderAgencyText` over a brief maxed out on every bounded string and array measures 7 055
 // characters, so this caps a forged value without ever cutting a real one.
 const MAX_AGENCY_TEXT_LENGTH = 8000;
-
-// Declared explicitly (rather than inferred from `execute`'s single return path) so that
-// lib/agent/conversation.ts can rewrite a forged historical output with a real `toolFailure`
-// when replaying a duplicated guide load, without widening what the live tool ever returns.
-type LoadGuideOutput =
-  { ok: true; guide: GuideName; content: string } | { ok: false; error: ToolError };
-
-export const loadGuideInputSchema = z.object({ guide: z.enum(GUIDE_NAMES) });
 
 export const destinationCardInputSchema = z.object({
   destinationId: destinationIdSchema,
@@ -45,6 +36,8 @@ export const destinationCardInputSchema = z.object({
     .max(5),
   coordinates: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }),
   flightTimeFromParis: z.string().max(40),
+  forChildren: z.string().min(10).max(200).optional(),
+  travelBetter: z.string().min(10).max(200),
 });
 
 const destinationCardOutputSchema = z.discriminatedUnion("ok", [
@@ -77,20 +70,24 @@ export function destinationCardFields(card: DestinationCardInput): DestinationCa
     sources: card.sources.map(({ title, url }) => ({ title, url })),
     coordinates: { lat: card.coordinates.lat, lng: card.coordinates.lng },
     flightTimeFromParis: card.flightTimeFromParis,
+    ...(card.forChildren === undefined ? {} : { forChildren: card.forChildren }),
+    travelBetter: card.travelBetter,
   };
 }
 
 // One builder for the card, shared by the live tool and by the replay of a client-sent history,
-// so the guide prerequisites and the source provenance cannot hold on one path and not the other.
+// so the family contract and the source provenance cannot hold on one path and not the other.
 export function buildDestinationCard(
   state: ConversationState,
   card: DestinationCardInput,
 ): DestinationCardOutput {
-  if (familyGuideMissing(state)) {
-    return toolFailure("business", "Chargez d'abord le guide family_travel avec load_guide.");
-  }
-  if (!state.loadedGuides.has("responsible_travel")) {
-    return toolFailure("business", "Chargez d'abord le guide responsible_travel avec load_guide.");
+  // A family card is where the family guidance shows or not: a destination proposed to parents
+  // without a word for the children or a single caveat is the card the traveller cannot use.
+  if (hasFamilySignals(state.brief) && (card.alerts.length === 0 || !card.forChildren)) {
+    return toolFailure(
+      "validation",
+      "Voyage en famille : la fiche dit ce qui plaira aux enfants (forChildren) et signale au moins un point de vigilance pour eux dans alerts (durée de vol rapportée à leur âge, altitude, santé, rythme).",
+    );
   }
   const invalid = invalidSources(
     state,
@@ -180,7 +177,8 @@ export function createTools({ state, search, today }: ToolDeps) {
         "Affiche une fiche destination illustrée (pourquoi, meilleure période, points forts, alertes, sources, carte) dans la conversation.",
         "destinationId doit être un identifiant du catalogue (code pays ISO 3166-1 alpha-2, par exemple « VN » pour le Viêt Nam).",
         "region, bestPeriod et flightTimeFromParis sont obligatoires et tiennent chacun sur une ligne, par exemple « Afrique de l'Ouest », « de novembre à mai », « 6 h 30 » : deux fiches du même tour s'alignent sur ces trois lignes.",
-        "Prérequis : load_guide('responsible_travel') chargé, et load_guide('family_travel') si le voyage est en famille.",
+        "travelBetter : une façon concrète de voyager mieux sur cette destination, dite comme une suggestion — période moins fréquentée, région à l'écart des foules, séjour plus long, trajets sobres sur place.",
+        "En famille, la fiche est refusée sans forChildren (ce qui plaira aux enfants, à leur âge) et sans au moins un point de vigilance pour eux dans alerts (durée de vol rapportée à leur âge, altitude, santé, rythme).",
         "En famille, aussi : un search_web avec topic 'health_formalities' dont la requête nomme la destination, par exemple « paludisme vaccins Cap Vert enfants ».",
         "Chaque source doit être une URL renvoyée par search_web dans cette conversation.",
         "Ne pas utiliser pour une destination hors catalogue : expliquer qu'aucune agence ne la couvre et proposer des alternatives du catalogue.",
@@ -188,20 +186,6 @@ export function createTools({ state, search, today }: ToolDeps) {
       inputSchema: destinationCardInputSchema,
       outputSchema: destinationCardOutputSchema,
       execute: async (card) => buildDestinationCard(state, card),
-    }),
-
-    load_guide: tool({
-      description: [
-        "Charge un guide d'instructions et le renvoie.",
-        "'family_travel' : dès que des enfants ou un voyage en famille sont mentionnés, dans ce même tour, juste après update_trip_brief et avant toute recherche, fiche ou récapitulatif.",
-        "'responsible_travel' : avant de recommander une destination, ou quand le voyageur veut éviter la foule, sortir des sentiers battus ou voyager de façon plus responsable.",
-        "Un guide déjà chargé reste valable pour toute la conversation : ne pas le recharger.",
-      ].join(" "),
-      inputSchema: loadGuideInputSchema,
-      execute: async ({ guide }): Promise<LoadGuideOutput> => {
-        state.loadedGuides.add(guide);
-        return { ok: true as const, guide, content: await loadGuide(guide) };
-      },
     }),
 
     update_trip_brief: tool({
@@ -215,10 +199,11 @@ export function createTools({ state, search, today }: ToolDeps) {
         "null efface un champ ; une liste remplace la précédente.",
         "Les sources d’une alerte de faisabilité doivent être des URL renvoyées par search_web dans cette conversation.",
         "Renvoie le brief, sa version et ce qui manque pour le récapitulatif.",
+        "La première fois que des enfants sont enregistrés, renvoie aussi familyGuidance : les conseils pour un voyage avec des enfants, à appliquer dans les questions et les fiches qui suivent.",
         "Ne pas l'appeler pour une information que le voyageur n'a pas donnée, ni pour re-confirmer une valeur déjà inchangée.",
       ].join(" "),
       inputSchema: tripBriefPatchSchema,
-      execute: async (patch): Promise<UpdateTripBriefOutput> => applyPatch(state, today, patch),
+      execute: async (patch): Promise<UpdateTripBriefOutput> => recordPatch(state, today, patch),
     }),
 
     propose_quote_request: tool({

@@ -1,10 +1,10 @@
 import { convertToModelMessages, pruneMessages, type ModelMessage } from "ai";
 import { toolFailure } from "@/lib/agent/errors";
-import { loadGuide } from "@/lib/agent/guides";
 import {
   applyPatch,
   applySend,
   createState,
+  recordPatch,
   recordSearch,
   type ConversationState,
 } from "@/lib/agent/state";
@@ -73,9 +73,6 @@ export function deriveConversationState(messages: ChatUIMessage[], today: Date):
         const patch = tripBriefPatchSchema.safeParse(part.input);
         if (patch.success) applyPatch(state, today, patch.data);
       }
-      if (part.type === "tool-load_guide" && part.state === "output-available") {
-        state.loadedGuides.add(part.input.guide);
-      }
       if (
         part.type === "tool-propose_quote_request" &&
         part.state === "output-available" &&
@@ -102,10 +99,10 @@ export async function prepareModelMessages(
   return withCacheBreakpoint(pruned);
 }
 
-// The client resends the whole history on every turn, so a forged `update_trip_brief`,
-// `show_destination_card` or `load_guide` output could otherwise reach the model unchanged.
-// Replay the history against a freshly derived state and replace those three outputs with the
-// recomputed, trustworthy value. `search_web`, `ask_traveler` and `propose_quote_request` outputs
+// The client resends the whole history on every turn, so a forged `update_trip_brief` or
+// `show_destination_card` output (family guidance included) could otherwise reach the model
+// unchanged. Replay the history against a freshly derived state and replace those two outputs with
+// the recomputed, trustworthy value. `search_web`, `ask_traveler` and `propose_quote_request` outputs
 // are left as the client sent them (see docs/adr/0003-stateless-brief.md).
 async function withTrustedToolOutputs(
   messages: ChatUIMessage[],
@@ -165,7 +162,7 @@ async function trustPart(part: ChatPart, state: ConversationState, today: Date):
         ),
       };
     }
-    return { ...part, output: applyPatch(state, today, patch.data) };
+    return { ...part, output: await recordPatch(state, today, patch.data) };
   }
   if (part.type === "tool-show_destination_card" && part.state === "output-available") {
     return {
@@ -173,22 +170,6 @@ async function trustPart(part: ChatPart, state: ConversationState, today: Date):
       input: destinationCardFields(part.input),
       output: buildDestinationCard(state, part.input),
     };
-  }
-  if (part.type === "tool-load_guide" && part.state === "output-available") {
-    const guide = part.input.guide;
-    // A guide is loaded once per conversation, so re-reading it for every part would let a
-    // handcrafted history multiply one file into megabytes of model context.
-    if (state.loadedGuides.has(guide)) {
-      return {
-        ...part,
-        output: toolFailure(
-          "business",
-          `Le guide ${guide} est déjà chargé dans cette conversation.`,
-        ),
-      };
-    }
-    state.loadedGuides.add(guide);
-    return { ...part, output: { ok: true, guide, content: await loadGuide(guide) } };
   }
   return part;
 }

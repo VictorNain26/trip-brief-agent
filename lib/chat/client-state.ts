@@ -3,7 +3,6 @@ import {
   lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
 import type { ChatUIMessage, ToolPart } from "@/lib/agent/types";
-import { GUIDE_LABELS } from "@/lib/brief/labels";
 import type { MissingItem } from "@/lib/brief/readiness";
 import type { TripBrief } from "@/lib/brief/schema";
 
@@ -35,7 +34,6 @@ const PENDING_STATUS = "Réponse en cours…";
 
 const TOOL_STATUS: Partial<Record<ChatUIMessage["parts"][number]["type"], string>> = {
   "tool-search_web": "Recherche en cours…",
-  "tool-load_guide": "Consultation des conseils…",
   "tool-show_destination_card": "Préparation de la fiche destination…",
   "tool-update_trip_brief": "Mise à jour de votre voyage…",
   "tool-propose_quote_request": "Préparation du récapitulatif…",
@@ -141,18 +139,12 @@ export function briefForVersion(messages: ChatUIMessage[], version: string): Tri
 
 export type ChatStatusMessage = { text: string; visible: boolean };
 
-// Says what is running, not just that something is: the query and the guide name are both on the
-// part already, and "Recherche en cours…" three times in a row tells the traveller nothing.
+// Says what is running, not just that something is: the query is on the part already, and "Recherche en cours…" three times in a row tells the traveller nothing.
 function runningLabel(part: ChatUIMessage["parts"][number]): string {
   const fallback = TOOL_STATUS[part.type] ?? PENDING_STATUS;
   if (part.type === "tool-search_web") {
     if (part.state !== "input-available") return fallback;
     return `Recherche\u00a0: ${part.input.query}`;
-  }
-  if (part.type === "tool-load_guide") {
-    const guide = part.input?.guide;
-    const label = guide ? GUIDE_LABELS[guide] : undefined;
-    return label ? `Consultation des ${label.toLowerCase()}` : fallback;
   }
   return fallback;
 }

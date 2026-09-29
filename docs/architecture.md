@@ -18,23 +18,24 @@ traveller approves, and a simulated send.
 
 Hybrid. An undecided traveller follows no fixed path, so the model chooses its next action turn
 by turn, and the core is an agentic loop: `streamText` runs up to 10 steps, and at each step the model answers, asks a choice
-question, searches, loads a guide, updates the brief or proposes the recap. The loop stops on the
+question, searches, shows a card, updates the brief or proposes the recap. The loop stops on the
 step cap, and the turn that sends an approved Demande de devis does not enter it at all. Around it,
 everything that must not depend on the model's judgement is a deterministic gate in code:
 
 - brief readiness (`missingForRecap` / `isReadyForRecap`),
-- guide prerequisites (`responsible_travel` before a destination card, `family_travel` when family
-  signals exist),
+- the family card contract (for a family, a card needs `forChildren` and at least one alert),
 - catalogue coverage (destination ids are a zod enum built from the catalogue),
 - source provenance (a card's sources must come from a `search_web` result in this conversation),
 - family health check (for a family, a card needs a successful `search_web` with topic
   `health_formalities` whose query names that destination),
-- sending (`sendDenial` = readiness, the family guide, and an approval that names the current
-  brief hash).
+- sending (`sendDenial` = readiness and an approval that names the current brief hash).
 
 The model can be wrong about any of these and the gate still holds: the tool returns a structured
 error saying what to do instead, and the model recovers from it inside the same turn. No step is
-forced onto a tool: when to fetch a guide or run a search is left to the agent, so the prompt, `requiredGuide` and the refusal messages guide it, and the gates are the guarantee.
+forced onto a tool. Guidance reaches the model through state rather than instructions: the family
+guide rides on the `update_trip_brief` result that first records children, and the card's fields
+(`forChildren`, `alerts`, `travelBetter`) are where that guidance and the responsible-travel
+principles show.
 
 ## Deployment shape
 
@@ -57,14 +58,13 @@ flowchart LR
   end
   UI -- UI messages --> API[/POST /api/chat/]
   API --> V{body size · validateUIMessages · checkConversation}
-  V --> F[deriveConversationState · rewrite brief, card and guide outputs · add today · prune old searches · cache breakpoint]
+  V --> F[deriveConversationState · rewrite brief and card outputs · add today · prune old searches · cache breakpoint]
   F --> ST[streamText · claude-sonnet-5-5 · effort medium]
   ST <--> T1[search_web] --> TV[(Tavily)]
-  ST <--> T2[load_guide] --> FS[(guides/*/SKILL.md)]
-  ST <--> T3[update_trip_brief]
+  ST <--> T3[update_trip_brief] --> FS[(guides/family_travel/SKILL.md)]
   ST <--> T4[show_destination_card]
   ST <--> T5[propose_quote_request]
-  T3 & T4 & T5 --> GATE{{gates: readiness · guides · catalogue · provenance · family health}}
+  T3 & T4 & T5 --> GATE{{gates: readiness · family card · catalogue · provenance · family health}}
   GATE --- CAT[(destinations.json)]
   ST -. client tool .-> T6[ask_traveler] -.-> Q
 ```
@@ -88,8 +88,8 @@ Every turn sends the whole UI message history. `POST /api/chat` processes it in 
    returned verbatim as the wire error: `400 system_message` for a client-sent `system` message,
    `400 unexpected_part` for any other part type, `413 too_many_messages` above 80 messages and
    `413 message_too_long` for a user text part longer than 2,000 characters.
-4. **`deriveConversationState`** — rebuilds `{ brief, loadedGuides, searchUrls, healthSearches }`
-   by replaying the **inputs** of `update_trip_brief` and `load_guide`, the URLs carried by
+4. **`deriveConversationState`** — rebuilds `{ brief, familyGuidanceGiven, searchUrls,
+   healthSearches }` by replaying the **inputs** of `update_trip_brief`, the URLs carried by
    client-sent `search_web` outputs and the queries of the successful `health_formalities` ones
    (through `recordSearch`, which the live tool calls too; a search counts from the next
    `step-start` part or the end of its message, as live, where a step's tool calls run together
@@ -106,14 +106,14 @@ Every turn sends the whole UI message history. `POST /api/chat` processes it in 
    below, where the model answers the traveller.
 6. **`prepareModelMessages`** — rewrites the history the model will see: every historical
    `update_trip_brief` output is recomputed from its input (an invalid patch becomes a `validation`
-   tool failure), every `show_destination_card` output is rebuilt from its input against the
-   replayed state, the first `load_guide` output for each guide is re-read from disk and any repeat
-   of the same guide becomes a `business` tool failure, today's date is appended to the first user
+   tool failure; the update that first records children gets the family guide re-read from disk,
+   once per conversation), every `show_destination_card` output is rebuilt from its input against
+   the replayed state, today's date is appended to the first user
    message, `convertToModelMessages` produces model messages, `pruneMessages` drops `search_web`
    calls and results older than the last six messages, and an `ephemeral` `cacheControl` breakpoint
    is set on the last message.
 7. **`streamText`** — `claude-sonnet-5-5`, `effort: "medium"`, `fallbacks: "default"`, the cached system prompt as
-   `instructions`, the six tools, `toolApproval` on `propose_quote_request`,
+   `instructions`, the five tools, `toolApproval` on `propose_quote_request`,
    `stopWhen: isStepCount(10)`, and `prepareStep` forcing `toolChoice: "none"` on the last step so
    the cap ends in a French sentence rather than a truncated tool call. `onError` logs the error
    name and, for an `APICallError`, the status code only — never conversation content.
@@ -175,14 +175,14 @@ sequenceDiagram
   participant S as /api/chat
   participant M as Model
   M-->>S: propose_quote_request(briefVersion)
-  S->>S: approvalFor(state): missingForRecap, family guide, version match
+  S->>S: approvalFor(state): missingForRecap, version match
   alt denied
     S-->>M: denial reason (what is missing, or the current version)
   else user-approval
     S-->>B: approval requested + recap card
     alt "Envoyer"
       B->>S: approved
-      S->>S: sendDenial = readiness + family guide + approved hash matches
+      S->>S: sendDenial = readiness + approved hash matches
       S->>S: confirmMandatoryFields
       S-->>B: simulated Demande de devis (agency text + JSON)
     else "Modifier" / "Abandonner"
@@ -198,7 +198,7 @@ sequenceDiagram
 
 ## Tools
 
-Six tools, each mapping to one capability of the agent. The count is deliberate: the
+Five tools, each mapping to one capability of the agent. The count is deliberate: the
 Claude Certified Architect exam guide (Foundations, task 2.3) warns that too many tools degrade
 selection (18 tools versus 4–5 in its example). Every description states the input format, when to
 use the tool and when not to. Inputs are validated with zod on the server even under strict tool
@@ -207,45 +207,33 @@ limits `minItems` to 0 or 1
 ([structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)).
 Expected failures return `{ ok: false, error: { errorCategory, isRetryable, message } }` with
 `errorCategory` in `validation | transient | business`; only `transient` is retryable. Parallel
-tool calls stay enabled, so a guide load and a search can run in the same step.
+tool calls stay enabled, so a brief update and a search can run in the same step.
 
 | Tool                     | Runs                        | Contract                                                                                                                                                                                                                                                                      |
 | ------------------------ | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `ask_traveler`           | client (no `execute`)       | `question`, `options` (2–6, `{ id, label, description? }`), `multiSelect`; output `{ selected: id[] }` or `{ freeText }`. Free text through the main input always answers the pending question.                                                                                 |
 | `search_web`             | server                      | `query`, `topic: "general" \| "health_formalities"`. Tavily, `searchDepth: "basic"`, timeout 8 s, at most 5 results, snippets truncated to 400 characters; `health_formalities` restricts results to `diplomatie.gouv.fr`, `pasteur.fr`, `who.int`. An empty list is a valid result; a failure is `transient`. |
-| `show_destination_card`  | server                      | `destinationId` (catalogue enum), `region`, `why`, `bestPeriod`, `highlights[]`, `alerts[]`, `sources[{ title, url }]`, `coordinates`, `flightTimeFromParis` — `region` and `flightTimeFromParis` are required, two cards of a turn being aligned row by row on them. Gates: `responsible_travel` loaded, `family_travel` loaded when family signals exist (`business` errors), every source URL seen in a `search_web` result (`validation` error), and, when family signals exist, a successful `health_formalities` search whose query names the destination — its label or the label with spaces and hyphens removed (« Vietnam » for « Viêt Nam »), compared after folding case, accents and punctuation, as whole words (`business` error naming the search to run). An unknown destination id fails input validation. |
-| `load_guide`             | server                      | `guide: "family_travel" \| "responsible_travel"` → the guide body read from `guides/<name>/SKILL.md`, frontmatter stripped.                                                                                                                                                          |
-| `update_trip_brief`      | server                      | A partial patch → `{ ok: true, brief, version, missingForRecap[], requiredGuide? }`. `requiredGuide` is returned when family signals exist without the family guide.                                                                                                           |
-| `propose_quote_request`  | server, behind tool approval| `briefVersion` (16 hex characters). The approval callback denies with the missing items, or "Chargez d'abord le guide family_travel", or the current version when the hash is stale; otherwise the recap card is shown. `execute` re-runs the same `sendDenial` gate, promotes the mandatory fields to `confirmed` in the returned brief and returns it with the agency-readable text. |
+| `show_destination_card`  | server                      | `destinationId` (catalogue enum), `region`, `why`, `bestPeriod`, `highlights[]`, `alerts[]`, `sources[{ title, url }]`, `coordinates`, `flightTimeFromParis`, `travelBetter` (one responsible-travel suggestion), `forChildren?` — `region` and `flightTimeFromParis` are required, two cards of a turn being aligned row by row on them. Gates: when family signals exist, `forChildren` and at least one alert (`validation` error naming what to add), every source URL seen in a `search_web` result (`validation` error), and, when family signals exist, a successful `health_formalities` search whose query names the destination — its label or the label with spaces and hyphens removed (« Vietnam » for « Viêt Nam »), compared after folding case, accents and punctuation, as whole words (`business` error naming the search to run). An unknown destination id fails input validation. |
+| `update_trip_brief`      | server                      | A partial patch → `{ ok: true, brief, version, missingForRecap[], familyGuidance? }`. `familyGuidance` is the family guide body, returned once per conversation, on the update that first records children.                                                                       |
+| `propose_quote_request`  | server, behind tool approval| `briefVersion` (16 hex characters). The approval callback denies with the missing items, or the current version when the hash is stale; otherwise the recap card is shown. `execute` re-runs the same `sendDenial` gate, promotes the mandatory fields to `confirmed` in the returned brief and returns it with the agency-readable text. |
 
-### Guides
+### Guidance
 
-`load_guide` carries its own trigger rules in its description: `family_travel` as soon as
-children, `partyType` family or a family trip are mentioned; `responsible_travel` before recommending a
-destination or when the traveller asks for something more responsible. The prerequisites are then
-enforced server-side against the replayed state, so a missed trigger produces a business error
-instead of an ungrounded recommendation.
+The family guide reaches the model when it becomes relevant, from the brief's state: `recordPatch`
+attaches it as `familyGuidance` to the `update_trip_brief` result that first records children, and
+`familyGuidanceGiven` keeps it to one copy per conversation, however often a history adds and
+removes children. The replay re-reads it from disk on that same update, so a client-sent value
+never reaches the model ([0009](adr/0009-guidance-from-brief-state.md)).
 
-A guide is loaded once, enters the conversation as a tool result and stays there. The system
-prompt never contains guide text — a unit test asserts it. The interface does not say which guide
-was loaded ([0007](adr/0007-no-internals-in-the-interface.md)); the tests, the gate and the
-status line show it. `tests/agent/trajectories.test.ts` asserts that a family
-brief is denied and a destination card refused until `family_travel` is loaded, that the same
-send goes through once it is, and that a model which records a family and loads the guide on its
-own reaches the send with no step forced;
-`tests/agent/tools.test.ts` asserts that `update_trip_brief` returns `requiredGuide` on a family
-signal. The gate in `buildDestinationCard` (`lib/agent/tools.ts`) makes a card impossible without
-`responsible_travel` and, once family signals are recorded, without `family_travel` or without a health
-search naming the destination: the family guide asks for health to be verified before a
-destination is recommended, and text the model reads after loading it is followed only some of
-the time. While the guide
-loads, the traveller sees the status line "Consultation des conseils famille".
+Text alone is followed only some of the time, so the card contract carries what the guidance asks
+for. For a family, `buildDestinationCard` refuses a card without `forChildren` or without at least
+one alert, and without a health search naming the destination; every card carries `travelBetter`,
+the responsible-travel suggestion. The responsible-travel principles apply to every
+recommendation, so they sit in the system prompt, in five lines.
 
 `guides/family_travel/SKILL.md` covers tone, what to ask or check for children (ages, rhythm,
-health, accommodation, meals), the signals to raise and the defaults.
-`guides/responsible_travel/SKILL.md` lists the levers a recommendation can use (off-season, less
-crowded regions, longer stays, closer destinations, local transport, the local agency, meeting
-residents, respect) and the phrasing rules. Both are written for this project.
+health, accommodation, meals), the signals to raise and the defaults. It is written for this
+project.
 
 ### Destination catalogue
 
@@ -288,25 +276,24 @@ The route is stateless and receives the whole history from the browser, so the c
 untrusted.
 
 - `validateUIMessages` checks every tool part's input against its tool's `inputSchema`. It checks
-  an output only where the tool declares an `outputSchema`: four of the six do — `ask_traveler`,
+  an output only where the tool declares an `outputSchema`: four of the five do — `ask_traveler`,
   `search_web`, `show_destination_card` and `propose_quote_request` — so a forged `search_web`
-  output is a `400` rather than something the route walks. The two that declare none,
-  `update_trip_brief` and `load_guide`, have their outputs replaced before the model call (below),
-  as does `show_destination_card`. That leaves `propose_quote_request`: its output is shaped by a
+  output is a `400` rather than something the route walks. The one that declares none,
+  `update_trip_brief`, has its output replaced before the model call (below), family guidance
+  included, as does `show_destination_card`. That leaves `propose_quote_request`: its output is shaped by a
   schema but not recomputed, and the server reads it — a `{ ok: true }` one makes both
   `deriveConversationState` and the replay run `applySend`, which promotes destination, dates,
   duration and travellers to `confirmed` as an approved recap does. The residual below covers what
   that is worth to the client sending it.
 - The brief is recomputed from `update_trip_brief` **inputs**; client-sent outputs of that tool
   never reach the model — `prepareModelMessages` overwrites them with the recomputed value.
-- `load_guide` outputs are re-read from disk by guide name before the model call, so the body of a
-  client-sent `tool-load_guide` part never reaches the model. A guide is read once per
-  conversation: repeats become a tool failure, so a handcrafted history cannot multiply one guide
-  file into megabytes of context. That replay matches on the `tool-load_guide` part type, so it
-  would miss the `dynamic-tool` part `validateUIMessages` produces for a tool part it cannot
-  attribute to a declared tool, whose output no schema checks either; `checkConversation` rejects
-  any `dynamic-tool` part with a `400`. The app declares all six of its tools, so such a part can
-  only come from a forged or stale history.
+- The family guidance on an `update_trip_brief` output is re-read from disk, on the one update that
+  first records children, so a client-sent value never reaches the model and a handcrafted history
+  cannot multiply the file into megabytes of context.
+- `validateUIMessages` turns a tool part it cannot attribute to a declared tool into a
+  `dynamic-tool` part, whose output no schema checks; `checkConversation` rejects any such part
+  with a `400`. It comes from a forged history, or from a tab opened before a tool was removed
+  (`load_guide`).
 - Destination card and feasibility alert sources are checked against the `search_web` outputs of
   the same conversation. Those outputs come from the client, so a forged search result
   makes a card cite a forged URL — inside that client's own session (see the residual below).
@@ -315,7 +302,7 @@ untrusted.
   approval is used without the experimental signing secret precisely because the server re-checks
   readiness and the brief hash.
 - Caps: 200,000-character body, 2,000-character user message, 80 messages, 10 steps per turn
-  (sized for a guide load plus three searches and three cards). Reaching the step cap ends the turn
+  (sized for a brief update plus three searches and three cards). Reaching the step cap ends the turn
   with a French sentence, not a raw error.
 - Web results are data, never instructions — stated in the system prompt and never given the
   ability to change a gate.
@@ -325,13 +312,13 @@ untrusted.
   `deriveConversationState` replays any `update_trip_brief` input present in the history without
   checking that the assistant emitted it, and `tripBriefPatchSchema` accepts
   `status: "confirmed"`, so a handcrafted history can set the mandatory fields itself, empty
-  `missingForRecap` and reach an approved send; the same applies to `loadedGuides`,
-  `searchUrls`, `healthSearches` — a forged `health_formalities` search keeps its own family card
+  `missingForRecap` and reach an approved send; the same applies to `searchUrls`,
+  `healthSearches` — a forged `health_formalities` search keeps its own family card
   past the health gate, which holds the model, not a client forging its own history — and to the
   `propose_quote_request` output whose presence replays the recap
   promotion. `search_web` outputs are not replayed — re-running the searches would cost a
   Tavily call per historical search on every turn — so a handcrafted snippet reaches the model
-  verbatim, the same injection channel a forged guide body would be if it were not re-read.
+  verbatim, the same injection channel forged family guidance would be if it were not re-read.
   Nothing is persisted and the send is simulated, so the blast radius is the session's own client.
   The answer is server-side persistence per `chatId` accepting only the latest message
   ([backlog](#backlog)), which makes the history the server's rather than the client's.

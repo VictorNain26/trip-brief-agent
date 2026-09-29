@@ -181,32 +181,9 @@ describe("statusLabel", () => {
     });
   });
 
-  it("names what is being searched and which guide is being read", () => {
+  it("names what is being searched", () => {
     const search = assistant("2", [searchPart("input-available")]);
     expect(statusLabel([search], "streaming")?.text).toBe("Recherche\u00a0: q");
-
-    const guide = assistant("2", [
-      {
-        type: "tool-load_guide",
-        toolCallId: "g",
-        state: "input-available",
-        input: { guide: "family_travel" },
-      },
-    ] as ChatUIMessage["parts"]);
-    expect(statusLabel([guide], "streaming")?.text).toBe("Consultation des conseils famille");
-  });
-
-  it("falls back instead of throwing on a partially streamed load_guide input", () => {
-    const guide = assistant("2", [
-      {
-        type: "tool-load_guide",
-        toolCallId: "g",
-        state: "input-streaming",
-        input: { guide: "fam" },
-      },
-    ] as unknown as ChatUIMessage["parts"]);
-    expect(() => statusLabel([guide], "streaming")).not.toThrow();
-    expect(statusLabel([guide], "streaming")?.text).toBe("Consultation des conseils…");
   });
 
   it("falls back instead of typing out a partially streamed search query", () => {
