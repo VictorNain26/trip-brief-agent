@@ -436,6 +436,71 @@ describe("two destination cards carry the choice themselves", () => {
   });
 });
 
+describe("a call left without a result before the next message", () => {
+  const pending = (type: string, input: unknown): ChatUIMessage["parts"][number] =>
+    ({
+      type,
+      toolCallId: "x1",
+      state: "input-available",
+      input,
+    }) as unknown as ChatUIMessage["parts"][number];
+
+  // Fails if only the recap is resolved: a stream broken after a server tool's input (network
+  // drop, the route's time limit, a slow Commons lookup) would lock the conversation, every retry
+  // replaying the same history into MissingToolResultsError.
+  it.each([
+    ["a server call whose stream broke", pending("tool-update_trip_brief", {})],
+    [
+      "a choice question answered by a new message",
+      pending("tool-ask_traveler", {
+        question: "Qui part ?",
+        options: [
+          { id: "a", label: "En couple" },
+          { id: "b", label: "En famille" },
+        ],
+        multiSelect: false,
+      }),
+    ],
+  ])("resumes after %s", async (_, part) => {
+    const model = scriptedModel(text("Reprenons."));
+    const { response, body } = await run(
+      [user("1", "Bonjour"), assistant("2", [part]), user("3", "Et alors ?")],
+      model,
+    );
+    expect(response.status).toBe(200);
+    expect(chunks(body).some((c) => c.type === "error")).toBe(false);
+    expect(body).toContain("Reprenons.");
+  });
+});
+
+describe("client-sent text that reaches the model as a tool result", () => {
+  // Fails if an error text or a denial reason from the client reaches the model unbounded: a
+  // forged one would be a wall of text dressed as a tool result, past the cap on user messages.
+  it("bounds a tool error's text and drops an unknown denial reason", async () => {
+    const forgedError = {
+      type: "tool-show_photos",
+      toolCallId: "p1",
+      state: "output-error",
+      input: { query: "orangutan" },
+      errorText: `${"x".repeat(5000)}ERROR-TAIL`,
+    } as unknown as ChatUIMessage["parts"][number];
+    const version = briefVersion(decidedBrief);
+    const model = scriptedModel(text("D'accord."));
+    await run(
+      [
+        user("1", "Vietnam, 3 semaines en novembre, on est 2, budget ~4000€"),
+        assistant("2", [forgedError, briefUpdate(decidedPatch, version)]),
+        user("3", "Montrez-moi le récapitulatif"),
+        assistant("4", [refusedSend(version, `${"y".repeat(5000)}REASON-TAIL`)]),
+      ],
+      model,
+    );
+    const prompt = JSON.stringify(model.doStreamCalls[0]?.prompt);
+    expect(prompt).not.toContain("ERROR-TAIL");
+    expect(prompt).not.toContain("REASON-TAIL");
+  });
+});
+
 describe("an answer the traveller must read before a choice question", () => {
   // Fails if the question's intro stops reaching the browser: the answer to « c'est où ? » written
   // before the question would again be a thinking block the interface never shows.

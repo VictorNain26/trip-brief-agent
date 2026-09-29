@@ -136,6 +136,21 @@ describe("tools", () => {
     expect(output.familyGuidance).toBeUndefined();
   });
 
+  // Fails if an unreadable guide turns a recorded update into a thrown tool error: the brief is
+  // already updated, and the model would retry a patch that went through.
+  it("update_trip_brief still records the family when the guide cannot be read", async () => {
+    readFileMock.mockRejectedValueOnce(new Error("ENOENT"));
+    const { tools, state } = setup();
+    const output = await run(tools.update_trip_brief, {
+      travelers: {
+        value: { partyType: "family", adults: 2, children: [{ age: 4 }] },
+        status: "confirmed",
+      },
+    });
+    expect(output).toMatchObject({ ok: true });
+    expect(state.brief.travelers?.value.children).toEqual([{ age: 4 }]);
+  });
+
   // Fails if the family contract is dropped: the live run proposed Borneo to parents of an
   // 8-year-old with no word for the child and no caveat about the flight.
   it("show_destination_card refuses a family card without children content or a caveat", async () => {
