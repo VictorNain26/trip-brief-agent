@@ -5,7 +5,7 @@ decisions behind each major choice are in [`docs/adr/`](adr/).
 
 ## Scope
 
-**Goal.** Turn an undecided traveller's chat into a structured trip brief a local agency can act
+**Goal.** Turn an undecided traveller's chat into a structured trip brief a travel agency could act
 on: destination, period, duration, travellers and budget, each with the traveller's words and
 whether they said it or the agent inferred it.
 

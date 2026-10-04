@@ -2,8 +2,8 @@
 
 A French conversational agent for a traveller who has not decided where, when or with whom to go.
 It talks with them, answers with sources, shows destinations, and turns the conversation into a
-structured trip brief — the part of a quote request a local agency reads to decide whether it can
-build an itinerary and a quote. It does not build the itinerary or the quote.
+structured trip brief — the part of a quote request a travel agency would read to decide whether it
+could build an itinerary and a quote. It does not build the itinerary or the quote.
 
 Built with Next.js, the AI SDK and Claude Sonnet 5.5, searching with Tavily. It is a prototype: see
 [what the interface does not say](#what-the-interface-does-not-say) before running it.
