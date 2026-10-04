@@ -51,13 +51,13 @@ deliverable an agency receives.
 ## Alternatives considered
 
 **Keep the chip.** It is one badge, it is honest, and it is the cheapest proof that lazy loading
-works. Not kept: the rule the owner set is about the traveller's screen, not about the badge's
+works. Not kept: the rule this project set is about the traveller's screen, not about the badge's
 cost, and a rule with an exception for the useful case is not a rule. The verification it carried
 is covered above, in the tests, the gates and the status line.
 
 **Move it behind a disclosure, or show it only in development.** Both keep the machinery in the
 traveller's panel and add a control or a flag to hide it — an abstraction for a need that does not
-exist, and a second code path that the delivered build would not exercise.
+exist, and a second code path that the production build would not exercise.
 
 **Show the guide's effect instead of its name** — a note saying advice has been adapted for
 children. Rejected: the effect is already in the agent's prose and in the questions it asks; a

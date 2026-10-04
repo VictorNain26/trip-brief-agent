@@ -52,7 +52,7 @@ export function missingForRecap(brief: TripBrief, today: Date): MissingItem[] {
   if (!travelers) missing.push("travelers");
   else {
     // `family` means travelling with minors, so an empty children list is an unanswered question,
-    // not an answer: the brief says the age of each child has to be asked early.
+    // not an answer: the age of each child has to be asked early.
     const childrenUnknown =
       travelers.children.some((child) => child.age === undefined) ||
       (travelers.partyType === "family" && travelers.children.length === 0);

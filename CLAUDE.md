@@ -1,7 +1,7 @@
 # Trip-brief agent
 
 Conversational agent that turns an undecided traveller's chat into a structured trip brief
-for a local agency. Scope, design and backlog: `docs/architecture.md`; decisions: `docs/adr/`.
+a travel agency could quote from. Scope, design and backlog: `docs/architecture.md`; decisions: `docs/adr/`.
 
 ## Commands
 
